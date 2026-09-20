@@ -1,0 +1,25 @@
+[project]
+name = "model-decision-serve"
+version = "0.1.0"
+description = "Jev-compatible decision inference server with pluggable runtimes."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "pydantic>=2.8.0",
+    "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+llama = ["llama-cpp-python>=0.3.0"]
+transformers = ["torch>=2.3.0", "transformers>=4.45.0"]
+all = [
+    "llama-cpp-python>=0.3.0",
+    "torch>=2.3.0",
+    "transformers>=4.45.0",
+]
+
+[project.scripts]
+decision-serve = "model_decision_serve.app:main"
+
+[tool.uv]
+package = true
