@@ -52,7 +52,7 @@ class ModelRegistry:
         self.definition = definition
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "ModelRegistry":
+    def from_file(cls, path: str | Path) -> ModelRegistry:
         raw = json.loads(Path(path).read_text())
         if not isinstance(raw, dict):
             raise RuntimeErrorBase("model registry must be a JSON object")
@@ -89,6 +89,7 @@ class RegistryRuntime(DecisionRuntime):
         if cached is not None:
             return cached
         config = entry.resolved_config()
+        runtime: DecisionRuntime
         if entry.backend == "llama":
             runtime = LlamaBackend(entry.model, config=config)
         elif entry.backend == "mlx":

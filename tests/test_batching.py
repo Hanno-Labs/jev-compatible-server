@@ -1,9 +1,9 @@
 import asyncio
 from collections.abc import Sequence
 
-from model_decision_serve.batching import DecisionBatcher
-from model_decision_serve.protocol import DecisionRequest, DecisionResponse, Usage
-from model_decision_serve.runtime import DecisionRuntime
+from jev_compatible_server.batching import DecisionBatcher
+from jev_compatible_server.protocol import DecisionRequest, DecisionResponse, Usage
+from jev_compatible_server.runtime import DecisionRuntime
 
 
 class FakeRuntime(DecisionRuntime):

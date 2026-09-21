@@ -1,4 +1,4 @@
-from model_decision_serve.protocol import DecisionRequest
+from jev_compatible_server.protocol import DecisionRequest
 
 
 def test_jev_request_accepts_mixed_questions() -> None:
@@ -22,4 +22,3 @@ def test_jev_request_accepts_mixed_questions() -> None:
         }
     )
     assert list(request.questions) == ["route", "severity", "urgent"]
-

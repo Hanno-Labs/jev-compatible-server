@@ -1,7 +1,7 @@
 [project]
-name = "model-decision-serve"
+name = "jev-compatible-server"
 version = "0.1.0"
-description = "Jev-compatible decision inference server with pluggable runtimes."
+description = "Open inference runtime for decision models with a Jev-compatible API."
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -11,15 +11,22 @@ dependencies = [
 
 [project.optional-dependencies]
 llama = ["llama-cpp-python>=0.3.0"]
-transformers = ["torch>=2.3.0", "transformers>=4.45.0"]
+transformers = [
+    "huggingface-hub>=0.30.0",
+    "peft>=0.18.0",
+    "torch>=2.3.0",
+    "transformers>=4.45.0",
+]
 all = [
+    "huggingface-hub>=0.30.0",
     "llama-cpp-python>=0.3.0",
+    "peft>=0.18.0",
     "torch>=2.3.0",
     "transformers>=4.45.0",
 ]
 
 [project.scripts]
-decision-serve = "model_decision_serve.app:main"
+jev-compatible-server = "jev_compatible_server.app:main"
 
 [tool.uv]
 package = true

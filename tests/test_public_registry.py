@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from model_decision_serve.registry import ModelRegistry
+from jev_compatible_server.registry import ModelRegistry
 
 
 def test_public_registry_excludes_bosun_and_lists_public_ids() -> None:
