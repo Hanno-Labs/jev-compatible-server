@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from collections.abc import Sequence
+from importlib import resources
 from pathlib import Path
 from typing import Any, Literal
 
@@ -53,7 +54,21 @@ class ModelRegistry:
 
     @classmethod
     def from_file(cls, path: str | Path) -> ModelRegistry:
-        raw = json.loads(Path(path).read_text())
+        return cls.from_json(Path(path).read_text())
+
+    @classmethod
+    def from_builtin(cls) -> ModelRegistry:
+        resource = resources.files("jev_compatible_server").joinpath("public-models.json")
+        try:
+            value = resource.read_text()
+        except FileNotFoundError:
+            source_path = Path(__file__).parents[2] / "configs" / "public-models.json"
+            value = source_path.read_text()
+        return cls.from_json(value)
+
+    @classmethod
+    def from_json(cls, value: str) -> ModelRegistry:
+        raw = json.loads(value)
         if not isinstance(raw, dict):
             raise RuntimeErrorBase("model registry must be a JSON object")
         try:

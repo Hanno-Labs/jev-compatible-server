@@ -19,6 +19,11 @@ def build_runtime() -> DecisionRuntime:
     registry_path = os.environ.get("DECISION_REGISTRY")
     if registry_path:
         return RegistryRuntime(ModelRegistry.from_file(registry_path))
+    explicit_model = os.environ.get("DECISION_MODEL_ID") or os.environ.get(
+        "DECISION_MODEL_PATH"
+    )
+    if not explicit_model and "DECISION_BACKEND" not in os.environ:
+        return RegistryRuntime(ModelRegistry.from_builtin())
     backend = os.environ.get("DECISION_BACKEND", "transformers").lower()
     config_path = os.environ.get("DECISION_CONFIG")
     config = load_decision_config(config_path) if config_path else {}
