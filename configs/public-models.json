@@ -1,0 +1,119 @@
+{
+  "default": "kev-4b",
+  "models": {
+    "kev-0.5b": {
+      "backend": "transformers",
+      "model": "jaredpalmer/kev-0.5b",
+      "description": "Kev prototype, Qwen2.5-0.5B plus pointer head",
+      "support_status": "supported",
+      "config": {
+        "decision.readout": "pointer_head",
+        "decision.backbone": "Qwen/Qwen2.5-0.5B",
+        "decision.adapter": "auto",
+        "decision.head_path": "head.pt",
+        "decision.head_repo": "jaredpalmer/kev-0.5b",
+        "decision.packing": {
+          "state_token": "<|fim_prefix|>",
+          "question_token": "<|fim_middle|>",
+          "option_start": "<|box_start|>",
+          "option_end": "<|box_end|>",
+          "decision_token": "<|fim_suffix|>"
+        }
+      }
+    },
+    "kev-0.6b": {
+      "backend": "transformers",
+      "model": "jaredpalmer/kev-0.6b",
+      "description": "Kev Qwen3-0.6B pointer-head model",
+      "support_status": "supported",
+      "config": {
+        "decision.readout": "pointer_head",
+        "decision.backbone": "Qwen/Qwen3-0.6B-Base",
+        "decision.adapter": "auto",
+        "decision.head_path": "head.pt",
+        "decision.head_repo": "jaredpalmer/kev-0.6b",
+        "decision.packing": {
+          "state_token": "<|fim_prefix|>",
+          "question_token": "<|fim_middle|>",
+          "option_start": "<|box_start|>",
+          "option_end": "<|box_end|>",
+          "decision_token": "<|fim_suffix|>"
+        }
+      }
+    },
+    "kev-4b": {
+      "backend": "transformers",
+      "model": "jaredpalmer/kev-4b",
+      "description": "Kev Qwen3.5-4B pointer-head model",
+      "support_status": "supported",
+      "config": {
+        "decision.readout": "pointer_head",
+        "decision.backbone": "Qwen/Qwen3.5-4B-Base",
+        "decision.adapter": "auto",
+        "decision.head_path": "head.pt",
+        "decision.head_repo": "jaredpalmer/kev-4b",
+        "decision.packing": {
+          "state_token": "<|fim_prefix|>",
+          "question_token": "<|fim_middle|>",
+          "option_start": "<|box_start|>",
+          "option_end": "<|box_end|>",
+          "decision_token": "<|fim_suffix|>"
+        }
+      }
+    },
+    "kev-8b": {
+      "backend": "transformers",
+      "model": "jaredpalmer/kev-8b",
+      "description": "Kev Qwen3-8B pointer-head model",
+      "support_status": "supported",
+      "config": {
+        "decision.readout": "pointer_head",
+        "decision.backbone": "Qwen/Qwen3-8B-Base",
+        "decision.adapter": "auto",
+        "decision.head_path": "head.pt",
+        "decision.head_repo": "jaredpalmer/kev-8b",
+        "decision.packing": {
+          "state_token": "<|fim_prefix|>",
+          "question_token": "<|fim_middle|>",
+          "option_start": "<|box_start|>",
+          "option_end": "<|box_end|>",
+          "decision_token": "<|fim_suffix|>"
+        }
+      }
+    },
+    "nanojev": {
+      "backend": "transformers",
+      "model": "C-Tianyu/NanoJev",
+      "description": "Qwen3-0.6B attention-based candidate-set head",
+      "support_status": "pending",
+      "enabled": false
+    },
+    "open-jev-deberta-v3-large": {
+      "backend": "transformers",
+      "model": "com-kotobalabs/open-jev-deberta-v3-large",
+      "description": "DeBERTa encoder with option scoring head",
+      "support_status": "pending",
+      "enabled": false
+    },
+    "system-one-qwen3.5-4b-scorer": {
+      "backend": "transformers",
+      "model": "pngwn/system-one-qwen3.5-4b-scorer",
+      "description": "Qwen3.5 scorer with custom scalar head",
+      "support_status": "pending",
+      "enabled": false
+    },
+    "laya-mlx": {
+      "backend": "mlx",
+      "model": "aac6fef/laya-mlx",
+      "description": "MLX bidirectional decision encoder with marker scalar outputs",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {
+        "decision.readout": "marker_scalar_head",
+        "decision.encoder": "bidirectional",
+        "decision.question_types": ["choice", "score", "noul"],
+        "decision.output": "option_probabilities"
+      }
+    }
+  }
+}
