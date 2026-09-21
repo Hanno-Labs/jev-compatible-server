@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from .protocol import (
     ChoiceAnswer,
@@ -14,8 +14,11 @@ from .protocol import (
     DecisionResponse,
     NoulAnswer,
     NoulQuestion,
+    QuestionType,
     ScoreAnswer,
     ScoreQuestion,
+    UnsupportedAnswer,
+    Usage,
 )
 
 
@@ -45,6 +48,104 @@ class DecisionRuntime(ABC):
 
     def decide(self, request: DecisionRequest) -> DecisionResponse:
         return self.decide_batch([request])[0]
+
+
+ALL_QUESTION_TYPES: tuple[QuestionType, ...] = ("choice", "score", "noul")
+
+
+def configured_question_types(config: dict[str, Any]) -> tuple[QuestionType, ...]:
+    """Read a model's declared capability boundary from decision metadata."""
+
+    nested = config.get("decision", {})
+    nested_types = nested.get("question_types") if isinstance(nested, dict) else None
+    value = config.get("decision.question_types", nested_types)
+    if value is None:
+        return ALL_QUESTION_TYPES
+    if not isinstance(value, list) or not value:
+        raise RuntimeErrorBase("decision.question_types must be a non-empty array")
+    if any(item not in ALL_QUESTION_TYPES for item in value):
+        raise RuntimeErrorBase(
+            "decision.question_types may contain only choice, score, and noul"
+        )
+    result: list[QuestionType] = []
+    for item in value:
+        typed_item = cast(QuestionType, item)
+        if typed_item not in result:
+            result.append(typed_item)
+    return tuple(result)
+
+
+class QuestionTypeRuntime(DecisionRuntime):
+    """Return explicit per-question unsupported results around any backend."""
+
+    def __init__(
+        self,
+        runtime: DecisionRuntime,
+        supported_types: Sequence[QuestionType],
+    ) -> None:
+        self.runtime = runtime
+        self.model_name = runtime.model_name
+        self.supported_types = tuple(supported_types)
+        self._supported = frozenset(supported_types)
+
+    def decide_batch(
+        self, requests: Sequence[DecisionRequest]
+    ) -> list[DecisionResponse]:
+        filtered: list[DecisionRequest] = []
+        filtered_indices: list[int] = []
+        for index, request in enumerate(requests):
+            questions = {
+                name: question
+                for name, question in request.questions.items()
+                if question.type in self._supported
+            }
+            if questions:
+                filtered.append(request.model_copy(update={"questions": questions}))
+                filtered_indices.append(index)
+
+        inferred: dict[int, DecisionResponse] = {}
+        if filtered:
+            responses = self.runtime.decide_batch(filtered)
+            if len(responses) != len(filtered):
+                raise RuntimeErrorBase("runtime returned the wrong batch length")
+            inferred = dict(zip(filtered_indices, responses, strict=True))
+
+        results: list[DecisionResponse] = []
+        for index, request in enumerate(requests):
+            response = inferred.get(index)
+            supported_answers = response.answers if response is not None else {}
+            answers: dict[str, Any] = {}
+            for name, question in request.questions.items():
+                if question.type in self._supported:
+                    answer = supported_answers.get(name)
+                    if answer is None:
+                        raise RuntimeErrorBase(
+                            f"runtime did not return answer for question {name!r}"
+                        )
+                    answers[name] = answer
+                else:
+                    answers[name] = UnsupportedAnswer(
+                        type="unsupported",
+                        question_type=question.type,
+                        supported_types=list(self.supported_types),
+                    )
+            results.append(
+                DecisionResponse(
+                    model=response.model if response is not None else self.model_name,
+                    answers=answers,
+                    usage=response.usage if response is not None else Usage(),
+                )
+            )
+        return results
+
+
+def apply_question_type_support(
+    runtime: DecisionRuntime, config: dict[str, Any]
+) -> DecisionRuntime:
+    supported = configured_question_types(config)
+    if supported == ALL_QUESTION_TYPES:
+        return runtime
+    return QuestionTypeRuntime(runtime, supported)
 
 
 class TokenLogitRuntime(DecisionRuntime):

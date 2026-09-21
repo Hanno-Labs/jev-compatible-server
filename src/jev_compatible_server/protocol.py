@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Content = str | dict[str, Any] | list[Any]
+QuestionType = Literal["choice", "score", "noul"]
 
 
 class ChoiceQuestion(BaseModel):
@@ -14,7 +15,7 @@ class ChoiceQuestion(BaseModel):
 
     type: Literal["choice"]
     instructions: Content
-    criteria: dict[str, Content] = Field(min_length=2, max_length=255)
+    criteria: dict[str, Content | None] = Field(min_length=2, max_length=255)
 
 
 class ScoreQuestion(BaseModel):
@@ -80,7 +81,16 @@ class NoulAnswer(BaseModel):
     noul: float
 
 
-Answer = ChoiceAnswer | ScoreAnswer | NoulAnswer
+class UnsupportedAnswer(BaseModel):
+    """Per-question capability result for partially compatible models."""
+
+    type: Literal["unsupported"]
+    question_type: QuestionType
+    reason: Literal["question_type_not_supported"] = "question_type_not_supported"
+    supported_types: list[QuestionType]
+
+
+Answer = ChoiceAnswer | ScoreAnswer | NoulAnswer | UnsupportedAnswer
 
 
 class Usage(BaseModel):
