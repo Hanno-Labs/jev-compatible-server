@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException
 
 from .backends import LlamaBackend, TransformersBackend, load_decision_config
@@ -42,12 +44,12 @@ def create_app(runtime: DecisionRuntime | None = None) -> FastAPI:
     )
 
     @asynccontextmanager
-    async def lifespan(_: FastAPI):
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await batcher.start()
         yield
         await batcher.close()
 
-    app = FastAPI(title="Jev-compatible Decision Inference Server", lifespan=lifespan)
+    app = FastAPI(title="jev-compatible-server", lifespan=lifespan)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -72,4 +74,4 @@ app: FastAPI | None = None
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("model_decision_serve.app:create_app", factory=True, host="0.0.0.0", port=8000)
+    uvicorn.run("jev_compatible_server.app:create_app", factory=True, host="0.0.0.0", port=8000)

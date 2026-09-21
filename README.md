@@ -1,4 +1,4 @@
-# model-decision-serve
+# jev-compatible-server
 
 Open inference runtime for decision models.
 
@@ -14,17 +14,18 @@ abstraction itself.
 
 ## Quick start
 
-Prerequisites: [install `uv`](https://docs.astral.sh/uv/getting-started/installation/),
-check out this repository, and run the following commands from its root.
+Prerequisites: [install `uv`](https://docs.astral.sh/uv/getting-started/installation/)
+and Git. Then clone this repository:
 
 The bundled registry includes the public Kev checkpoints. This example starts
 the smallest one through the Transformers pointer-head readout:
 
 ```bash
-cd packages/model-decision-serve
+git clone https://github.com/Hanno-Labs/jev-compatible-server.git
+cd jev-compatible-server
 
 DECISION_REGISTRY="$PWD/configs/public-models.json" \
-uv run --package model-decision-serve --extra transformers --with peft decision-serve
+uv run --extra transformers jev-compatible-server
 ```
 
 The first request downloads `jaredpalmer/kev-0.5b` and its Qwen backbone from
@@ -242,7 +243,7 @@ Without a registry, select one model directly:
 DECISION_BACKEND=transformers \
 DECISION_MODEL_ID=your-org/your-model \
 DECISION_CONFIG=/path/to/decision.json \
-uv run --package model-decision-serve --extra transformers decision-serve
+uv run --extra transformers jev-compatible-server
 ```
 
 For GGUF, set `DECISION_BACKEND=llama`, `DECISION_MODEL_PATH`, and install the

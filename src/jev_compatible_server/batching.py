@@ -53,7 +53,7 @@ class DecisionBatcher:
                     break
                 try:
                     batch.append(await asyncio.wait_for(self._queue.get(), timeout))
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
             try:
                 responses = await asyncio.to_thread(
@@ -63,7 +63,6 @@ class DecisionBatcher:
                     raise RuntimeError("runtime returned the wrong batch length")
                 for item, response in zip(batch, responses, strict=True):
                     item.future.set_result(response)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - propagate backend failures to every future
                 for item in batch:
                     item.future.set_exception(exc)
-

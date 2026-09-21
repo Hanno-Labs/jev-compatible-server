@@ -1,9 +1,10 @@
 import json
+from pathlib import Path
 
-from model_decision_serve.registry import ModelRegistry
+from jev_compatible_server.registry import ModelRegistry
 
 
-def test_registry_resolves_default_and_overrides_config(tmp_path) -> None:
+def test_registry_resolves_default_and_overrides_config(tmp_path: Path) -> None:
     path = tmp_path / "registry.json"
     path.write_text(
         json.dumps(
@@ -23,4 +24,3 @@ def test_registry_resolves_default_and_overrides_config(tmp_path) -> None:
     name, entry = registry.resolve(None)
     assert name == "qwen"
     assert entry.resolved_config()["decision.readout"] == "token_logits"
-

@@ -10,7 +10,7 @@ import json
 import math
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .protocol import DecisionRequest, DecisionResponse, NoulQuestion, Usage
 from .runtime import RuntimeErrorBase, TokenLogitRuntime
@@ -35,24 +35,24 @@ class LlamaBackend(TokenLogitRuntime):
         n_gpu_layers: int = -1,
     ):
         try:
-            from llama_cpp import Llama
+            from llama_cpp import Llama  # type: ignore[import-not-found]
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise RuntimeErrorBase(
                 "LlamaBackend requires the 'llama' optional dependency"
             ) from exc
-        metadata = getattr(self._llama, "metadata", {})
-        if callable(metadata):
-            metadata = metadata()
-        merged_config = dict(metadata) if isinstance(metadata, dict) else {}
-        merged_config.update(config or {})
-        super().__init__(model_name=str(merged_config.get("model", model_path)), config=merged_config)
-        self._llama = Llama(
+        self._llama: Any = Llama(
             model_path=model_path,
             n_ctx=n_ctx,
             n_gpu_layers=n_gpu_layers,
             logits_all=True,
             verbose=False,
         )
+        metadata = getattr(self._llama, "metadata", {})
+        if callable(metadata):
+            metadata = metadata()
+        merged_config = dict(metadata) if isinstance(metadata, dict) else {}
+        merged_config.update(config or {})
+        super().__init__(model_name=str(merged_config.get("model", model_path)), config=merged_config)
 
     def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
         results: list[DecisionResponse] = []
@@ -63,7 +63,7 @@ class LlamaBackend(TokenLogitRuntime):
                 prompt = self._prompt(request, name, question)
                 encoded = self._llama.tokenize(prompt.encode("utf-8"), add_bos=True)
                 self._llama.reset()
-                output = self._llama.eval(encoded)
+                self._llama.eval(encoded)
                 input_tokens += len(encoded)
                 row = self._llama.scores[-1]
                 logits = {self._token_id(label): float(row[self._token_id(label)]) for label in self._labels(question)}
@@ -131,7 +131,7 @@ class TransformersBackend(TokenLogitRuntime):
         with self._torch.inference_mode():
             output = self._model(**encoded)
         logits = output.logits[:, -1, :]
-        answers: list[dict[str, Any]] = [dict() for _ in requests]
+        answers: list[dict[str, Any]] = [{} for _ in requests]
         for row, (request_index, name, question) in enumerate(prompts):
             labels = LlamaBackend._labels(question)
             values = {self._token_id(label): float(logits[row, self._token_id(label)].item()) for label in labels}
@@ -218,7 +218,12 @@ class PointerTransformersBackend(TokenLogitRuntime):
         self._k_bias = k_bias.to(self._device) if k_bias is not None else None
 
     @staticmethod
-    def _find_tensor(state: dict[str, Any], suffixes: tuple[str, ...], *, required: bool = True):
+    def _find_tensor(
+        state: dict[str, Any],
+        suffixes: tuple[str, ...],
+        *,
+        required: bool = True,
+    ) -> Any | None:
         for key, value in state.items():
             if isinstance(key, str) and any(key.endswith(suffix) for suffix in suffixes):
                 return value
@@ -242,7 +247,7 @@ class PointerTransformersBackend(TokenLogitRuntime):
 
         def user(value: Any) -> list[int]:
             text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-            return tok(text, add_special_tokens=False).input_ids
+            return cast(list[int], tok(text, add_special_tokens=False).input_ids)
 
         def special(name: str) -> int:
             token = packing[name]
@@ -274,7 +279,7 @@ class PointerTransformersBackend(TokenLogitRuntime):
         ids.append(special("decision_token")); seg.append(1); opt.append(-2)
         return {"ids": ids, "seg": seg, "opt": opt, "ends": ends, "decision": decision_index}
 
-    def _hidden_batch(self, encodings: list[dict[str, Any]]):
+    def _hidden_batch(self, encodings: list[dict[str, Any]]) -> Any:
         torch = self._torch
         length = max(len(item["ids"]) for item in encodings)
         pad_id = self._tokenizer.pad_token_id or 0
@@ -301,7 +306,7 @@ class PointerTransformersBackend(TokenLogitRuntime):
             for name, question in request.questions.items():
                 flattened.append((request_index, name, question, self._encode(request, question)))
         hidden = self._hidden_batch([item[3] for item in flattened])
-        answers: list[dict[str, Any]] = [dict() for _ in requests]
+        answers: list[dict[str, Any]] = [{} for _ in requests]
         for row, (request_index, name, question, encoding) in enumerate(flattened):
             query = hidden[row, encoding["decision"]]
             options = hidden[row, encoding["ends"]]

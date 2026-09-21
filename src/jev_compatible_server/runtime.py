@@ -16,7 +16,6 @@ from .protocol import (
     NoulQuestion,
     ScoreAnswer,
     ScoreQuestion,
-    Usage,
 )
 
 

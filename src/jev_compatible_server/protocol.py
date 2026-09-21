@@ -53,7 +53,7 @@ class DecisionRequest(BaseModel):
     questions: dict[str, Question] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_question_names(self) -> "DecisionRequest":
+    def validate_question_names(self) -> DecisionRequest:
         for name in self.questions:
             if not name or len(name) > 128:
                 raise ValueError("question names must be 1-128 characters")
