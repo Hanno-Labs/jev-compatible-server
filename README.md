@@ -14,6 +14,9 @@ abstraction itself.
 
 ## Quick start
 
+Prerequisites: [install `uv`](https://docs.astral.sh/uv/getting-started/installation/),
+check out this repository, and run the following commands from its root.
+
 The bundled registry includes the public Kev checkpoints. This example starts
 the smallest one through the Transformers pointer-head readout:
 
