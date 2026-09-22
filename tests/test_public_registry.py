@@ -29,6 +29,16 @@ def test_public_registry_lists_bosun_and_public_ids() -> None:
         registry.definition.models["system-one-qwen3.5-4b-scorer"].support_status
         == "supported"
     )
+    system_one = registry.definition.models["system-one-qwen3.5-4b-scorer"]
+    system_one_config = system_one.resolved_config(
+        registry.definition.recipes[system_one.recipe or ""]
+    )
+    assert system_one_config["decision"]["loader"]["revision"] == (
+        "1001bb4d826a52d1f399e183466143f4da7b741b"
+    )
+    assert system_one_config["decision"]["loader"]["adapter_revision"] == (
+        "e6464dce15f013c2ef641593a85cc6afcdaea928"
+    )
     assert registry.definition.models["nanojev"].enabled is False
     assert json.loads(path.read_text())["models"]["kev-8b"]["model"] == "jaredpalmer/kev-8b"
     laya = registry.definition.models["laya-mlx"]

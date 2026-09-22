@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -17,6 +19,7 @@ from jev_compatible_server.classifier_adapters import (
 from jev_compatible_server.encoder_decoder import MarginTask
 from jev_compatible_server.protocol import DecisionRequest
 from jev_compatible_server.runtime import RuntimeErrorBase
+from jev_compatible_server.sequence_classifier import _load_adapter
 
 
 def _verdict_request() -> DecisionRequest:
@@ -44,6 +47,30 @@ def _verdict_request() -> DecisionRequest:
             },
         }
     )
+
+
+def test_sequence_classifier_pins_adapter_revision(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[object, str, dict[str, object]]] = []
+    fake_peft = ModuleType("peft")
+
+    class FakePeftModel:
+        @staticmethod
+        def from_pretrained(model: object, adapter: str, **kwargs: object) -> object:
+            calls.append((model, adapter, kwargs))
+            return model
+
+    fake_peft.PeftModel = FakePeftModel
+    monkeypatch.setitem(sys.modules, "peft", fake_peft)
+    model = object()
+
+    assert _load_adapter(
+        model, "pngwn/system-one-qwen3.5-4b-scorer", {"adapter_revision": "pinned"}
+    ) is model
+    assert calls == [
+        (model, "pngwn/system-one-qwen3.5-4b-scorer", {"revision": "pinned"})
+    ]
+    with pytest.raises(RuntimeErrorBase, match="adapter_revision"):
+        _load_adapter(model, "pngwn/system-one-qwen3.5-4b-scorer", {"adapter_revision": ""})
 
 
 class FakeTensor:
