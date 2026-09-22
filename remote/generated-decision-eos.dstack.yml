@@ -29,7 +29,7 @@ retry:
   on_events: [no-capacity, interruption, error]
   duration: 12h
 commands:
-  - apt-get update -qq && apt-get install -y -qq jq curl
+  - apt-get update -qq && apt-get install -y -qq jq curl build-essential
   - pip install -U uv "hf>=1.23" "huggingface_hub>=1.23" hf_xet
   - bash /workflow/run_registry_decisionbench.sh
 resources:
