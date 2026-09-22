@@ -8,11 +8,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 
-from .backends import LlamaBackend, TransformersBackend, load_decision_config
+from .backends import LlamaBackend, load_decision_config
 from .batching import DecisionBatcher
 from .protocol import DecisionRequest, DecisionResponse
-from .registry import ModelRegistry, RegistryRuntime
-from .runtime import DecisionRuntime, RuntimeErrorBase
+from .registry import ModelRegistry, RegistryRuntime, build_transformers_runtime
+from .runtime import DecisionRuntime, RuntimeErrorBase, apply_question_type_support
 
 
 def build_runtime() -> DecisionRuntime:
@@ -31,12 +31,16 @@ def build_runtime() -> DecisionRuntime:
         model_path = os.environ.get("DECISION_MODEL_PATH")
         if not model_path:
             raise RuntimeErrorBase("DECISION_MODEL_PATH is required for the llama backend")
-        return LlamaBackend(model_path, config=config)
+        return apply_question_type_support(
+            LlamaBackend(model_path, config=config), config
+        )
     if backend == "transformers":
         model_id = os.environ.get("DECISION_MODEL_ID")
         if not model_id:
             raise RuntimeErrorBase("DECISION_MODEL_ID is required for the transformers backend")
-        return TransformersBackend(model_id, config=config)
+        return apply_question_type_support(
+            build_transformers_runtime(model_id, config), config
+        )
     raise RuntimeErrorBase(f"unknown DECISION_BACKEND: {backend}")
 
 

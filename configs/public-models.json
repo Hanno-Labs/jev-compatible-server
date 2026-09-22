@@ -1,5 +1,237 @@
 {
   "default": "kev-4b",
+  "recipes": {
+    "hidden-state-probe-v1": {
+      "decision": {
+        "readout": "hidden_state_probe",
+        "hidden": {
+          "token": "last_non_pad"
+        },
+        "dtype": "bfloat16",
+        "batch_size": 8
+      }
+    },
+    "hidden-state-candidate-verifier-v1": {
+      "decision": {
+        "readout": "hidden_state_probe",
+        "question_types": [
+          "choice",
+          "score",
+          "noul"
+        ],
+        "hidden": {
+          "token": "last_non_pad"
+        },
+        "dtype": "bfloat16",
+        "batch_size": 8,
+        "instruction_adapters": {
+          "choice": "",
+          "score": "",
+          "noul": ""
+        },
+        "candidates": {
+          "choice": {
+            "criterion_template": "{key}: {criterion}",
+            "empty_criterion_template": "{key}"
+          },
+          "score": {
+            "criterion_template": "{criterion}"
+          },
+          "noul": {
+            "no_criteria_options": {
+              "true": "yes",
+              "false": "no"
+            },
+            "criterion_template": "{criterion}"
+          }
+        },
+        "aggregation": {
+          "choice_temperature": 1.0,
+          "score_temperature": 1.0,
+          "noul_a": 1.0,
+          "noul_b": 0.0,
+          "noul_mode": "true_false_softmax",
+          "confidence": "normalized_entropy"
+        }
+      }
+    },
+    "encoder-decoder-yes-no-margin-v1": {
+      "decision": {
+        "readout": "encoder_decoder_margin",
+        "labels": {
+          "positive": "yes",
+          "negative": "no"
+        },
+        "encoder": {
+          "document_template": "<Document>: {document}",
+          "pooling": "mean_chunks",
+          "chunk_size": 4
+        },
+        "decoder": {
+          "template": "<bos><start_of_turn>user\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be \"yes\" or \"no\".\n\n<Instruct>: {instruction}\n<Query>: {query}<end_of_turn>\n<start_of_turn>model\n\n\n\n",
+          "pad_to_multiple_of": 8
+        },
+        "instruction_adapters": {
+          "choice": "Evaluate whether the candidate option described in the Document is an appropriate answer to the question above, given the information in the Query. Judge the candidate by its stated description, not merely by topical relevance.",
+          "score": "Evaluate whether the level described in the Document accurately characterizes the Query with respect to the assessment above. Judge this level by its stated criteria, not merely by topical relevance.",
+          "noul": "Given the Query, evaluate whether the candidate criterion in the Document correctly describes the answer to the question above. Answer yes if this candidate criterion is satisfied, otherwise no."
+        },
+        "candidates": {
+          "choice": {
+            "criterion_template": "{key}: {criterion}",
+            "empty_criterion_template": "{key}"
+          },
+          "score": {
+            "criterion_template": "{criterion}"
+          },
+          "noul": {
+            "no_criteria_template": "{state}",
+            "criterion_template": "{criterion}"
+          }
+        },
+        "aggregation": {
+          "choice_temperature": 1.0,
+          "score_temperature": 1.0,
+          "noul_a": 1.0,
+          "noul_b": 0.0,
+          "confidence": "normalized_entropy"
+        },
+        "limits": {
+          "query": 512,
+          "document": 1024,
+          "decoder": 2048
+        },
+        "batch_size": 4,
+        "cache": {
+          "max_mib": 256
+        }
+      }
+    },
+    "sequence-classifier-native-scalar-v1": {
+      "decision": {
+        "readout": "sequence_classifier_margin",
+        "loader": {
+          "num_labels": 1
+        },
+        "input": {
+          "state_template": "State:\n{state}",
+          "tail_template": "\n\nQuestion:\n{instructions}\n\nOption:\n{option}",
+          "truncation": "preserve_tail",
+          "max_length": 512
+        },
+        "instruction_adapters": {
+          "choice": "",
+          "score": "",
+          "noul": ""
+        },
+        "candidates": {
+          "choice": {
+            "criterion_template": "{key}: {criterion}",
+            "empty_criterion_template": "{key}"
+          },
+          "score": {
+            "criterion_template": "{criterion}"
+          },
+          "noul": {
+            "no_criteria_options": {
+              "true": "yes",
+              "false": "no"
+            },
+            "criterion_template": "{criterion}"
+          }
+        },
+        "aggregation": {
+          "choice_temperature": 1.0,
+          "score_temperature": 1.0,
+          "noul_a": 1.0,
+          "noul_b": 0.0,
+          "confidence": "normalized_entropy"
+        },
+        "batch_size": 32
+      }
+    },
+    "cross-encoder-reranker-v1": {
+      "decision": {
+        "readout": "cross_encoder_margin",
+        "max_length": 512,
+        "batch_size": 16,
+        "instruction_adapters": {
+          "choice": "",
+          "score": "",
+          "noul": ""
+        },
+        "candidates": {
+          "choice": {
+            "criterion_template": "{key}: {criterion}",
+            "empty_criterion_template": "{key}"
+          },
+          "score": {
+            "criterion_template": "{criterion}"
+          },
+          "noul": {
+            "no_criteria_options": {
+              "true": "yes",
+              "false": "no"
+            },
+            "criterion_template": "{criterion}"
+          }
+        },
+        "aggregation": {
+          "choice_temperature": 1.0,
+          "score_temperature": 1.0,
+          "noul_a": 1.0,
+          "noul_b": 0.0,
+          "confidence": "normalized_entropy"
+        }
+      }
+    },
+    "sequence-classifier-scalar-options-v1": {
+      "decision": {
+        "readout": "sequence_classifier_margin",
+        "loader": {
+          "base_model": "Qwen/Qwen3.5-4B-Base",
+          "adapter": "auto",
+          "num_labels": 1
+        },
+        "input": {
+          "state_template": "State:\n{state}",
+          "tail_template": "\n\nQuestion:\n{instructions}\n\nOption:\n{option}",
+          "truncation": "preserve_tail",
+          "max_length": 384
+        },
+        "instruction_adapters": {
+          "choice": "",
+          "score": "",
+          "noul": ""
+        },
+        "candidates": {
+          "choice": {
+            "criterion_template": "{key}: {criterion}",
+            "empty_criterion_template": "{key}"
+          },
+          "score": {
+            "criterion_template": "{criterion}"
+          },
+          "noul": {
+            "no_criteria_options": {
+              "true": "yes",
+              "false": "no"
+            },
+            "criterion_template": "{criterion}"
+          }
+        },
+        "aggregation": {
+          "choice_temperature": 1.75,
+          "score_temperature": 1.75,
+          "noul_a": 0.5714285714285714,
+          "noul_b": 0.0,
+          "noul_mode": "true_false_softmax",
+          "confidence": "max_probability"
+        },
+        "batch_size": 48
+      }
+    }
+  },
   "models": {
     "kev-0.5b": {
       "backend": "transformers",
@@ -81,6 +313,27 @@
         }
       }
     },
+    "kalm-jev-nano": {
+      "backend": "transformers",
+      "model": "KaLM-Embedding/KaLM-Reranker-V1-Nano-R2",
+      "recipe": "encoder-decoder-yes-no-margin-v1",
+      "description": "Nano encoder-decoder yes/no-margin decision model",
+      "support_status": "supported"
+    },
+    "kalm-jev-small": {
+      "backend": "transformers",
+      "model": "KaLM-Embedding/KaLM-Reranker-V1-Small-R2",
+      "recipe": "encoder-decoder-yes-no-margin-v1",
+      "description": "Small encoder-decoder yes/no-margin decision model",
+      "support_status": "supported"
+    },
+    "kalm-jev-large": {
+      "backend": "transformers",
+      "model": "KaLM-Embedding/KaLM-Reranker-V1-Large-R2",
+      "recipe": "encoder-decoder-yes-no-margin-v1",
+      "description": "Large encoder-decoder yes/no-margin decision model",
+      "support_status": "supported"
+    },
     "nanojev": {
       "backend": "transformers",
       "model": "C-Tianyu/NanoJev",
@@ -98,9 +351,170 @@
     "system-one-qwen3.5-4b-scorer": {
       "backend": "transformers",
       "model": "pngwn/system-one-qwen3.5-4b-scorer",
-      "description": "Qwen3.5 scorer with custom scalar head",
+      "recipe": "sequence-classifier-scalar-options-v1",
+      "description": "Qwen3.5 plus LoRA scalar candidate-scoring head",
+      "support_status": "supported"
+    },
+    "ztc-judge-4b": {
+      "backend": "transformers",
+      "model": "FINAL-Bench/ZTC-Judge-4B",
+      "recipe": "hidden-state-candidate-verifier-v1",
+      "description": "Question-answer verifier using a final-hidden-state RBF probe",
+      "support_status": "supported",
+      "config": {
+        "decision": {
+          "loader": {
+            "revision": "b0bb16038d7adbca6f4edda90ac72fb960d8319f",
+            "attn_implementation": "sdpa"
+          },
+          "input": {
+            "mode": "candidate_tasks",
+            "template": "다음은 어떤 문제와 그에 대한 답변이다. 이 답변이 옳은지 판단하라.\n\n[문제]\n{query}\n\n{instructions}\n\n[답변]\n{candidate}\n\n이 답변은 옳은가?",
+            "max_length": 2048
+          },
+          "probe": {
+            "kind": "rbf",
+            "repo": "auto",
+            "file": "ztc_curve_probe.npz"
+          }
+        }
+      }
+    },
+    "ztc-judge-9b": {
+      "backend": "transformers",
+      "model": "FINAL-Bench/ZTC-Judge-9B",
+      "recipe": "hidden-state-candidate-verifier-v1",
+      "description": "Question-answer verifier using a final-hidden-state RBF probe",
+      "support_status": "supported",
+      "config": {
+        "decision": {
+          "loader": {
+            "revision": "05d154a56b6d48ea7f2d999cabbafae3f26734b9",
+            "attn_implementation": "sdpa"
+          },
+          "input": {
+            "mode": "candidate_tasks",
+            "template": "다음은 어떤 문제와 그에 대한 답변이다. 이 답변이 옳은지 판단하라.\n\n[문제]\n{query}\n\n{instructions}\n\n[답변]\n{candidate}\n\n이 답변은 옳은가?",
+            "max_length": 2048
+          },
+          "probe": {
+            "kind": "rbf",
+            "repo": "auto",
+            "file": "ztc_curve_probe.npz"
+          }
+        }
+      }
+    },
+    "ztc-judge-27b": {
+      "backend": "transformers",
+      "model": "FINAL-Bench/ZTC-Judge-27B",
+      "recipe": "hidden-state-candidate-verifier-v1",
+      "description": "Question-answer verifier using a final-hidden-state RBF probe",
+      "support_status": "supported",
+      "config": {
+        "decision": {
+          "loader": {
+            "revision": "6cbd8acd12d185941271adfd0b302371b789b85a",
+            "attn_implementation": "sdpa"
+          },
+          "input": {
+            "mode": "candidate_tasks",
+            "template": "다음은 어떤 문제와 그에 대한 답변이다. 이 답변이 옳은지 판단하라.\n\n[문제]\n{query}\n\n{instructions}\n\n[답변]\n{candidate}\n\n이 답변은 옳은가?",
+            "max_length": 2048
+          },
+          "probe": {
+            "kind": "rbf",
+            "repo": "auto",
+            "file": "ztc_curve_probe.npz"
+          },
+          "batch_size": 1
+        }
+      }
+    },
+    "darwin-397b-ztc": {
+      "backend": "transformers",
+      "model": "FINAL-Bench/Darwin-397B-ZTC",
+      "recipe": "hidden-state-probe-v1",
+      "description": "Calibrated self-confidence probe over the final prompt hidden state",
+      "support_status": "supported",
+      "config": {
+        "decision": {
+          "question_types": [
+            "noul"
+          ],
+          "loader": {
+            "revision": "7ff4f83a3d9873844cd6e066b691150f4c9cf501",
+            "attn_implementation": "sdpa",
+            "device_map": "auto"
+          },
+          "input": {
+            "mode": "shared_state",
+            "template": "{state}",
+            "fields": {},
+            "max_length": 2048
+          },
+          "probe": {
+            "kind": "linear",
+            "repo": "auto",
+            "file": "ztc/ztc_probe_darwin397b.npz"
+          },
+          "output": {
+            "transform": "probe_calibrated_sigmoid"
+          },
+          "batch_size": 1
+        }
+      }
+    },
+    "patronus-lynx-8b-instruct": {
+      "backend": "transformers",
+      "model": "PatronusAI/Llama-3-Patronus-Lynx-8B-Instruct",
+      "description": "Generative RAG faithfulness judge with PASS/FAIL output",
       "support_status": "pending",
-      "enabled": false
+      "enabled": false,
+      "config": {
+        "decision.readout": "generative_structured_judge"
+      }
+    },
+    "laya-multilingual": {
+      "backend": "transformers",
+      "model": "convaiinnovations/laya-multilingual",
+      "description": "mmBERT option-marker set head with act/escalate output",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {
+        "decision.readout": "option_marker_set_head"
+      }
+    },
+    "laya": {
+      "backend": "transformers",
+      "model": "convaiinnovations/laya",
+      "description": "Published Laya non-autoregressive typed-decision model",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision.readout": "laya_native",
+        "decision.question_types": ["choice", "score", "noul"]
+      }
+    },
+    "vectara-hhem-2.1": {
+      "backend": "transformers",
+      "model": "vectara/hallucination_evaluation_model",
+      "description": "Pairwise premise/hypothesis consistency classifier",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {
+        "decision.readout": "pair_sequence_classifier"
+      }
+    },
+    "qwen3-next-80b-a3b-instruct": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3-Next-80B-A3B-Instruct",
+      "description": "Generic autoregressive instruction model without a decision readout recipe",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {
+        "decision.readout": "generative_structured_judge"
+      }
     },
     "laya-mlx": {
       "backend": "mlx",
@@ -114,6 +528,176 @@
         "decision.question_types": ["choice", "score", "noul"],
         "decision.output": "option_probabilities"
       }
+    },
+    "bge-reranker-v2-m3": {
+      "backend": "transformers",
+      "model": "BAAI/bge-reranker-v2-m3",
+      "recipe": "sequence-classifier-native-scalar-v1",
+      "description": "BGE multilingual reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "gte-reranker-modernbert-base": {
+      "backend": "transformers",
+      "model": "Alibaba-NLP/gte-reranker-modernbert-base",
+      "recipe": "sequence-classifier-native-scalar-v1",
+      "description": "GTE ModernBERT reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "certo": {
+      "backend": "transformers",
+      "model": "altslate/certo-decision-model",
+      "recipe": "sequence-classifier-native-scalar-v1",
+      "description": "Certo decision classifier exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "mxbai-rerank-base-v2": {
+      "backend": "transformers",
+      "model": "mixedbread-ai/mxbai-rerank-base-v2",
+      "recipe": "cross-encoder-reranker-v1",
+      "description": "Mixedbread reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "qwen3-reranker-4b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3-Reranker-4B",
+      "recipe": "cross-encoder-reranker-v1",
+      "description": "Qwen3 reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "zerank-2": {
+      "backend": "transformers",
+      "model": "zeroentropy/zerank-2-reranker",
+      "recipe": "cross-encoder-reranker-v1",
+      "description": "ZeroEntropy reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "jqv": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3-32B",
+      "description": "JQV option-letter logit judge; requires packed shared-attention readout",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "option_letter_logits"}
+    },
+    "litjev": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.8-27B",
+      "description": "LitJev native output-head decision logits",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "native_output_head"}
+    },
+    "djev": {
+      "backend": "transformers",
+      "model": "google/diffusiongemma-26B-A4B-it",
+      "description": "DJeV structured DiffusionGemma decision distribution",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "diffusion_structured_read"}
+    },
+    "djev-thinking": {
+      "backend": "transformers",
+      "model": "google/diffusiongemma-26B-A4B-it",
+      "description": "DJeV thinking variant with staged thought and distribution readout",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "diffusion_thinking_read"}
+    },
+    "jeff": {
+      "backend": "transformers",
+      "model": "knowledgator/gliformer-large-v1",
+      "description": "Jeff GLiFormer native system-one decision service",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "gliformer_native"}
+    },
+    "open-jev-zefan-2b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.5-2B",
+      "description": "Open-Jev 2B packaged LoRA plus calibrated scalar head",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "openjev_scalar_head"}
+    },
+    "open-jev-zefan-9b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.5-9B",
+      "description": "Open-Jev 9B packaged LoRA plus calibrated scalar head",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "openjev_scalar_head"}
+    },
+    "opendecision": {
+      "backend": "transformers",
+      "model": "MoritzLaurer/ModernBERT-large-zeroshot-v2.0",
+      "description": "OpenDecision NLI entailment candidate scorer",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "nli_entailment"}
+    },
+    "openjev-thinking": {
+      "backend": "transformers",
+      "model": "google/diffusiongemma-26b-a4b-it",
+      "description": "OpenJev thinking DiffusionGemma typed server",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "diffusion_thinking_read"}
+    },
+    "openjev-verdict": {
+      "backend": "transformers",
+      "model": "heman10x/rlcd-modernbert-151m",
+      "description": "OpenJev Verdict GLiClass distribution and calibrator",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "gliclass_calibrated"}
+    },
+    "reflex-4b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.5-4B",
+      "description": "Reflex 4B LoRA decision logits with two-order aggregation",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "causal_two_order"}
+    },
+    "reflex-27b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.8-27B",
+      "description": "Reflex 27B direct decision logits with two-order aggregation",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "causal_two_order"}
+    },
+    "simplejev-qwen3.6-35b-a3b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.6-35B-A3B",
+      "description": "SimpleJev Qwen3.6 direct next-token decision logits",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "causal_option_logits"}
+    },
+    "simplejev-qwen3.8-27b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.8-27B",
+      "description": "SimpleJev Qwen3.8 direct next-token decision logits",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "causal_option_logits"}
+    },
+    "smalljev": {
+      "backend": "transformers",
+      "model": "openbmb/MiniCPM5-2B-Base",
+      "description": "SmallJev semantic option scorer with LoRA and calibration head",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "semantic_option_head"}
+    },
+    "winnow-12b": {
+      "backend": "llama",
+      "model": "EldanRing/Winnow-12B-Q8_0.gguf",
+      "description": "Winnow shared-branch llama.cpp decision server",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "winnow_shared_branch"}
     }
   }
 }

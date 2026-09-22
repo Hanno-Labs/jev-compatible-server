@@ -68,7 +68,9 @@ registries require the environment described in the
 `jev-compatible-server` is an open inference runtime for decision models. It
 accepts one shared state with one or more typed questions, runs the selected
 model through llama.cpp or Hugging Face Transformers, and returns normalized
-`choice`, `score`, and `noul` answers.
+`choice`, `score`, and `noul` answers. Models that implement only part of that
+contract return an explicit `unsupported` result for each incompatible
+question without discarding compatible answers in the same request.
 
 The HTTP interface implements Jev's `POST /v1/systemone` request and response
 shape so applications can move between hosted Jev and self-hosted models
@@ -91,7 +93,7 @@ without replacing their decision API.
 | Backend | Model format | Built-in readouts |
 | --- | --- | --- |
 | llama.cpp | GGUF | token logits |
-| Hugging Face Transformers | Transformers checkpoints | token logits, pointer head |
+| Hugging Face Transformers | Transformers checkpoints | token logits, pointer head, encoder-decoder margin, scalar sequence classifier, hidden-state probe |
 
 Backends execute the neural network; readouts convert model outputs into typed
 decision probabilities. See [models and backends](docs/MODELS.md) for supported

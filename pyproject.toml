@@ -12,17 +12,23 @@ dependencies = [
 [project.optional-dependencies]
 llama = ["llama-cpp-python>=0.3.0"]
 transformers = [
+    "accelerate>=1.10.0",
     "huggingface-hub>=0.30.0",
-    "peft>=0.18.0",
+    "numpy>=1.26.0",
+    "peft>=0.21.0",
+    "sentence-transformers>=5.0.0",
     "torch>=2.3.0",
-    "transformers>=4.45.0",
+    "transformers>=5.3.0",
 ]
 all = [
+    "accelerate>=1.10.0",
     "huggingface-hub>=0.30.0",
     "llama-cpp-python>=0.3.0",
-    "peft>=0.18.0",
+    "numpy>=1.26.0",
+    "peft>=0.21.0",
+    "sentence-transformers>=5.0.0",
     "torch>=2.3.0",
-    "transformers>=4.45.0",
+    "transformers>=5.3.0",
 ]
 
 [project.scripts]
