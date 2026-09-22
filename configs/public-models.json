@@ -574,18 +574,46 @@
     "jqv": {
       "backend": "transformers",
       "model": "Qwen/Qwen3-32B",
-      "description": "JQV option-letter logit judge; requires packed shared-attention readout",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "option_letter_logits"}
+      "description": "JQV option-letter causal logit judge",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "jqv",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 3.0225814579771493,
+          "loader": {
+            "model": "Qwen/Qwen3-32B",
+            "revision": "9216db5781bf21249d130ec9da846c4624c16137",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
     },
     "litjev": {
       "backend": "transformers",
       "model": "Qwen/Qwen3.8-27B",
-      "description": "LitJev native output-head decision logits",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "native_output_head"}
+      "description": "LitJev native no-thinking causal option-logit judge",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "litjev",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "loader": {
+            "model": "Qwen/Qwen3.8-27B",
+            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
     },
     "djev": {
       "backend": "transformers",
@@ -613,27 +641,129 @@
     },
     "open-jev-zefan-2b": {
       "backend": "transformers",
-      "model": "Qwen/Qwen3.5-2B",
+      "model": "ZefanCai/Open-Jev-2B",
       "description": "Open-Jev 2B packaged LoRA plus calibrated scalar head",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "openjev_scalar_head"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "openjev_scalar_head",
+          "question_types": ["choice", "score", "noul"],
+          "dtype": "bfloat16",
+          "loader": {
+            "base_model": "Qwen/Qwen3.5-2B",
+            "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc",
+            "tokenizer": "Qwen/Qwen3.5-2B",
+            "model_class": "image_text_to_text",
+            "backbone_path": "model.language_model",
+            "attn_implementation": "sdpa",
+            "adapter": {
+              "repo": "ZefanCai/Open-Jev-2B",
+              "revision": "0c7aa498b1627be8da4acf34c863ff0ee0a92785",
+              "subfolder": "package/checkpoint/adapter"
+            }
+          },
+          "input": {
+            "template": "{query}\n{instructions}\n{candidate}",
+            "max_length": 4096,
+            "chat_template": {
+              "add_generation_prompt": true,
+              "enable_thinking": false
+            }
+          },
+          "artifacts": {
+            "head": {
+              "repo": "ZefanCai/Open-Jev-2B",
+              "revision": "0c7aa498b1627be8da4acf34c863ff0ee0a92785",
+              "file": "package/checkpoint/head.pt",
+              "kind": "linear"
+            },
+            "calibration": {
+              "repo": "ZefanCai/Open-Jev-2B",
+              "revision": "0c7aa498b1627be8da4acf34c863ff0ee0a92785",
+              "file": "package/checkpoint/temperature.json",
+              "field": "temperature"
+            }
+          },
+          "batch_size": 32
+        }
+      }
     },
     "open-jev-zefan-9b": {
       "backend": "transformers",
-      "model": "Qwen/Qwen3.5-9B",
+      "model": "ZefanCai/Open-Jev-9B",
       "description": "Open-Jev 9B packaged LoRA plus calibrated scalar head",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "openjev_scalar_head"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "openjev_scalar_head",
+          "question_types": ["choice", "score", "noul"],
+          "dtype": "bfloat16",
+          "loader": {
+            "base_model": "Qwen/Qwen3.5-9B",
+            "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+            "tokenizer": "Qwen/Qwen3.5-9B",
+            "model_class": "image_text_to_text",
+            "backbone_path": "model.language_model",
+            "attn_implementation": "sdpa",
+            "adapter": {
+              "repo": "ZefanCai/Open-Jev-9B",
+              "revision": "47e966881e489511c0c7f5633a9e1960a676a551",
+              "subfolder": "package/checkpoint/adapter"
+            }
+          },
+          "input": {
+            "template": "{query}\n{instructions}\n{candidate}",
+            "max_length": 4096,
+            "chat_template": {
+              "add_generation_prompt": true,
+              "enable_thinking": false
+            }
+          },
+          "artifacts": {
+            "head": {
+              "repo": "ZefanCai/Open-Jev-9B",
+              "revision": "47e966881e489511c0c7f5633a9e1960a676a551",
+              "file": "package/checkpoint/head.pt",
+              "kind": "linear"
+            },
+            "calibration": {
+              "repo": "ZefanCai/Open-Jev-9B",
+              "revision": "47e966881e489511c0c7f5633a9e1960a676a551",
+              "file": "package/checkpoint/temperature.json",
+              "field": "temperature"
+            }
+          },
+          "batch_size": 32
+        }
+      }
     },
     "opendecision": {
       "backend": "transformers",
       "model": "MoritzLaurer/ModernBERT-large-zeroshot-v2.0",
       "description": "OpenDecision NLI entailment candidate scorer",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "nli_entailment"}
+      "recipe": "hidden-state-candidate-verifier-v1",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "nli_entailment",
+          "question_types": ["choice", "score", "noul"],
+          "loader": {
+            "base_model": "MoritzLaurer/ModernBERT-large-zeroshot-v2.0",
+            "tokenizer": "MoritzLaurer/ModernBERT-large-zeroshot-v2.0",
+            "revision": "a51e07b524299e309dd2b88d48b0cfa2bd9ec598"
+          },
+          "entailment_label": "entailment",
+          "input": {
+            "premise_template": "{state}",
+            "hypothesis_template": "{instructions}\n\nCandidate: {candidate}",
+            "max_length": 8192
+          },
+          "batch_size": 32
+        }
+      }
     },
     "openjev-thinking": {
       "backend": "transformers",
@@ -647,49 +777,152 @@
       "backend": "transformers",
       "model": "heman10x/rlcd-modernbert-151m",
       "description": "OpenJev Verdict GLiClass distribution and calibrator",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "gliclass_calibrated"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "gliclass_calibrated",
+          "question_types": ["choice", "score", "noul"],
+          "loader": {
+            "base_model": "heman10x/rlcd-modernbert-151m",
+            "tokenizer": "heman10x/rlcd-modernbert-151m",
+            "revision": "8af2496eb63c7fa66d7d234e1f62629380030eb4"
+          },
+          "input": {
+            "max_length": 512,
+            "max_candidates": 25
+          },
+          "batch_size": 32,
+          "calibrator": {
+            "repo": "heman10x/rlcd-modernbert-151m",
+            "file": "calibrator.json",
+            "revision": "8af2496eb63c7fa66d7d234e1f62629380030eb4",
+            "format": "rlcd-calibrator-v1"
+          }
+        }
+      }
     },
     "reflex-4b": {
       "backend": "transformers",
       "model": "Qwen/Qwen3.5-4B",
       "description": "Reflex 4B LoRA decision logits with two-order aggregation",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "causal_two_order"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "reflex",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "two_order_aggregation": true,
+          "loader": {
+            "model": "Qwen/Qwen3.5-4B",
+            "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+            "adapter": "kshetrajna12/reflex-qwen3.5-4b-lora",
+            "adapter_revision": "9df1cbbbc1837ba494530a59d3d9d345688ed250",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
     },
     "reflex-27b": {
       "backend": "transformers",
       "model": "Qwen/Qwen3.8-27B",
       "description": "Reflex 27B direct decision logits with two-order aggregation",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "causal_two_order"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "reflex",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "two_order_aggregation": true,
+          "loader": {
+            "model": "Qwen/Qwen3.8-27B",
+            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
     },
     "simplejev-qwen3.6-35b-a3b": {
       "backend": "transformers",
       "model": "Qwen/Qwen3.6-35B-A3B",
       "description": "SimpleJev Qwen3.6 direct next-token decision logits",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "causal_option_logits"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "simplejev_v1",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "loader": {
+            "model": "Qwen/Qwen3.6-35B-A3B",
+            "revision": "995ad96eacd98c81ed38be0c5b274b04031597b0",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
     },
     "simplejev-qwen3.8-27b": {
       "backend": "transformers",
       "model": "Qwen/Qwen3.8-27B",
       "description": "SimpleJev Qwen3.8 direct next-token decision logits",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "causal_option_logits"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "simplejev_v1",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "loader": {
+            "model": "Qwen/Qwen3.8-27B",
+            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
     },
     "smalljev": {
       "backend": "transformers",
-      "model": "openbmb/MiniCPM5-2B-Base",
-      "description": "SmallJev semantic option scorer with LoRA and calibration head",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "semantic_option_head"}
+      "model": "isHeSatoshi/smalljev-semantic-v9",
+      "description": "SmallJev semantic-v9 LoRA plus option-span scorer",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "semantic_option_head",
+          "question_types": ["choice"],
+          "loader": {
+            "base_model": "openbmb/MiniCPM5-2B-Base",
+            "revision": "96a57cd572a02506b4500f54427dca24970c1bac",
+            "tokenizer": "openbmb/MiniCPM5-2B-Base",
+            "adapter": {
+              "repo": "isHeSatoshi/smalljev-semantic-v9",
+              "revision": "8e2bac7c4e922371c05899f4f000233e8096fee6",
+              "subfolder": "semantic-v9-lora"
+            }
+          },
+          "artifacts": {
+            "head": {
+              "repo": "isHeSatoshi/smalljev-semantic-v9",
+              "revision": "8e2bac7c4e922371c05899f4f000233e8096fee6",
+              "file": "semantic-v9-scorer.pt"
+            }
+          }
+        }
+      }
     },
     "winnow-12b": {
       "backend": "llama",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -15,15 +15,48 @@ from .registry import ModelRegistry, RegistryRuntime, build_transformers_runtime
 from .runtime import DecisionRuntime, RuntimeErrorBase, apply_question_type_support
 
 
-def build_runtime() -> DecisionRuntime:
+def _positive_batch_size(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError("must be a positive integer") from exc
+    if parsed <= 0:
+        raise ValueError("must be a positive integer")
+    return parsed
+
+
+def _model_batch_size_override(explicit: int | None = None) -> int | None:
+    if explicit is not None:
+        if isinstance(explicit, bool) or explicit <= 0:
+            raise RuntimeErrorBase("model batch size override must be a positive integer")
+        return explicit
+    configured = os.environ.get("DECISION_MODEL_BATCH_SIZE")
+    if configured is None:
+        return None
+    try:
+        return _positive_batch_size(configured)
+    except ValueError as exc:
+        raise RuntimeErrorBase(
+            "DECISION_MODEL_BATCH_SIZE must be a positive integer"
+        ) from exc
+
+
+def build_runtime(*, model_batch_size: int | None = None) -> DecisionRuntime:
+    model_batch_size = _model_batch_size_override(model_batch_size)
     registry_path = os.environ.get("DECISION_REGISTRY")
     if registry_path:
-        return RegistryRuntime(ModelRegistry.from_file(registry_path))
+        return RegistryRuntime(
+            ModelRegistry.from_file(registry_path),
+            model_batch_size=model_batch_size,
+        )
     explicit_model = os.environ.get("DECISION_MODEL_ID") or os.environ.get(
         "DECISION_MODEL_PATH"
     )
     if not explicit_model and "DECISION_BACKEND" not in os.environ:
-        return RegistryRuntime(ModelRegistry.from_builtin())
+        return RegistryRuntime(
+            ModelRegistry.from_builtin(),
+            model_batch_size=model_batch_size,
+        )
     backend = os.environ.get("DECISION_BACKEND", "transformers").lower()
     config_path = os.environ.get("DECISION_CONFIG")
     config = load_decision_config(config_path) if config_path else {}
@@ -39,13 +72,22 @@ def build_runtime() -> DecisionRuntime:
         if not model_id:
             raise RuntimeErrorBase("DECISION_MODEL_ID is required for the transformers backend")
         return apply_question_type_support(
-            build_transformers_runtime(model_id, config), config
+            build_transformers_runtime(
+                model_id,
+                config,
+                batch_size_override=model_batch_size,
+            ),
+            config,
         )
     raise RuntimeErrorBase(f"unknown DECISION_BACKEND: {backend}")
 
 
-def create_app(runtime: DecisionRuntime | None = None) -> FastAPI:
-    selected_runtime = runtime or build_runtime()
+def create_app(
+    runtime: DecisionRuntime | None = None,
+    *,
+    model_batch_size: int | None = None,
+) -> FastAPI:
+    selected_runtime = runtime or build_runtime(model_batch_size=model_batch_size)
     batcher = DecisionBatcher(
         selected_runtime,
         max_batch_size=int(os.environ.get("DECISION_MAX_BATCH_SIZE", "16")),
@@ -80,7 +122,23 @@ def create_app(runtime: DecisionRuntime | None = None) -> FastAPI:
 app: FastAPI | None = None
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
+    import argparse
+
     import uvicorn
 
-    uvicorn.run("jev_compatible_server.app:create_app", factory=True, host="0.0.0.0", port=8000)
+    parser = argparse.ArgumentParser(description="Serve a Jev-compatible decision API")
+    parser.add_argument(
+        "--model-batch-size",
+        type=_positive_batch_size,
+        help=(
+            "override decision.batch_size for Transformers model forward passes; "
+            "defaults to the selected model recipe"
+        ),
+    )
+    args = parser.parse_args(argv)
+    uvicorn.run(
+        create_app(model_batch_size=args.model_batch_size),
+        host="0.0.0.0",
+        port=8000,
+    )

@@ -13,6 +13,7 @@ dependencies = [
 llama = ["llama-cpp-python>=0.3.0"]
 transformers = [
     "accelerate>=1.10.0",
+    "gliclass>=0.1.0",
     "huggingface-hub>=0.30.0",
     "numpy>=1.26.0",
     "peft>=0.21.0",
@@ -22,6 +23,7 @@ transformers = [
 ]
 all = [
     "accelerate>=1.10.0",
+    "gliclass>=0.1.0",
     "huggingface-hub>=0.30.0",
     "llama-cpp-python>=0.3.0",
     "numpy>=1.26.0",
@@ -33,6 +35,14 @@ all = [
 
 [project.scripts]
 jev-compatible-server = "jev_compatible_server.app:main"
+
+[dependency-groups]
+dev = [
+    "httpx2>=0.1.0",
+    "mypy>=1.15.0",
+    "pytest>=8.3.0",
+    "ruff>=0.11.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -57,8 +67,14 @@ strict = true
 module = [
     "huggingface_hub",
     "huggingface_hub.*",
+    "gliclass",
+    "gliclass.*",
+    "numpy",
+    "numpy.*",
     "peft",
     "peft.*",
+    "sentence_transformers",
+    "sentence_transformers.*",
     "torch",
     "torch.*",
     "transformers",
