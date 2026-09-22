@@ -4,10 +4,26 @@ from pathlib import Path
 from jev_compatible_server.registry import ModelRegistry
 
 
-def test_public_registry_excludes_bosun_and_lists_public_ids() -> None:
+def test_public_registry_lists_bosun_and_public_ids() -> None:
     path = Path(__file__).parents[1] / "configs" / "public-models.json"
     registry = ModelRegistry.from_file(path)
-    assert "bosun" not in registry.definition.models
+    expected_bosun = {
+        "bosun-v3.1-0.6b": "Hanno-Labs/bosun-v3.1-0.6b",
+        "bosun-v3.1-1.7b": "Hanno-Labs/bosun-v3.1-1.7b",
+    }
+    for name, model_id in expected_bosun.items():
+        entry = registry.definition.models[name]
+        config = entry.resolved_config(
+            registry.definition.recipes[entry.recipe or ""]
+        )
+        assert entry.model == model_id
+        assert entry.support_status == "supported"
+        assert config["decision"]["readout"] == "bosun_decision_tokens"
+        assert config["decision"]["question_types"] == [
+            "choice",
+            "score",
+            "noul",
+        ]
     assert registry.definition.models["kev-4b"].support_status == "supported"
     assert (
         registry.definition.models["system-one-qwen3.5-4b-scorer"].support_status

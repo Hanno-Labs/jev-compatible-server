@@ -17,6 +17,7 @@ from .backends import (
     TransformersBackend,
     load_decision_config,
 )
+from .bosun import BosunDecisionBackend
 from .causal_options import CausalOptionsBackend
 from .classifier_adapters import GLiClassCalibratedBackend, NLIEntailmentBackend
 from .cross_encoder import CrossEncoderBackend
@@ -161,6 +162,8 @@ def build_transformers_runtime(
         return CrossEncoderBackend(model_id, config=effective_config)
     if readout == "causal_options":
         return CausalOptionsBackend(model_id, config=effective_config)
+    if readout == "bosun_decision_tokens":
+        return BosunDecisionBackend(model_id, config=effective_config)
     if readout == "nli_entailment":
         return NLIEntailmentBackend(model_id, config=effective_config)
     if readout == "gliclass_calibrated":

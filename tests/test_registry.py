@@ -192,6 +192,7 @@ def test_transformers_dispatch_supports_custom_head_adapters(
 @pytest.mark.parametrize(
     ("readout", "backend_name"),
     [
+        ("bosun_decision_tokens", "BosunDecisionBackend"),
         ("diffusion_structured_read", "DjevHTTPRuntime"),
         ("gliformer_native", "JeffHTTPRuntime"),
         ("gliner2_multilabel", "GLiNER2Runtime"),

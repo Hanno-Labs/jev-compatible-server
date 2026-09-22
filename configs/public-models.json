@@ -1,6 +1,23 @@
 {
   "default": "kev-4b",
   "recipes": {
+    "bosun-decision-tokens-v1": {
+      "decision": {
+        "readout": "bosun_decision_tokens",
+        "question_types": [
+          "choice",
+          "score",
+          "noul"
+        ],
+        "dtype": "bfloat16",
+        "seed": 0,
+        "loader": {
+          "dtype": "bfloat16",
+          "device_map": "auto",
+          "attn_implementation": "sdpa"
+        }
+      }
+    },
     "hidden-state-probe-v1": {
       "decision": {
         "readout": "hidden_state_probe",
@@ -233,6 +250,34 @@
     }
   },
   "models": {
+    "bosun-v3.1-0.6b": {
+      "backend": "transformers",
+      "model": "Hanno-Labs/bosun-v3.1-0.6b",
+      "recipe": "bosun-decision-tokens-v1",
+      "description": "Bosun 3.1 0.6B native typed-decision tokens",
+      "support_status": "supported",
+      "config": {
+        "decision": {
+          "loader": {
+            "revision": "87cea31da06559b0f6509f7b45e2724c38e45c03"
+          }
+        }
+      }
+    },
+    "bosun-v3.1-1.7b": {
+      "backend": "transformers",
+      "model": "Hanno-Labs/bosun-v3.1-1.7b",
+      "recipe": "bosun-decision-tokens-v1",
+      "description": "Bosun 3.1 1.7B native typed-decision tokens",
+      "support_status": "supported",
+      "config": {
+        "decision": {
+          "loader": {
+            "revision": "8c715a360af4f2d93ce4b7aafd85529f10e760f7"
+          }
+        }
+      }
+    },
     "kev-0.5b": {
       "backend": "transformers",
       "model": "jaredpalmer/kev-0.5b",
