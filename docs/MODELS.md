@@ -9,6 +9,8 @@ explicitly disabled.
 
 | Model | Backend | Readout | Question types |
 | --- | --- | --- | --- |
+| `Hanno-Labs/bosun-v3.1-0.6b` | Transformers | native Bosun decision tokens | `choice`, `score`, `noul` |
+| `Hanno-Labs/bosun-v3.1-1.7b` | Transformers | native Bosun decision tokens | `choice`, `score`, `noul` |
 | `jaredpalmer/kev-0.5b` | Transformers | pointer head | `choice`, `score`, `noul` |
 | `jaredpalmer/kev-0.6b` | Transformers | pointer head | `choice`, `score`, `noul` |
 | `jaredpalmer/kev-4b` | Transformers | pointer head | `choice`, `score`, `noul` |
@@ -43,6 +45,7 @@ not count as supported models.
 | --- | --- | --- |
 | llama.cpp/GGUF | token logits | GGUF plus prompt and decision-token metadata |
 | Transformers | token logits | causal LM plus prompt and decision-token metadata |
+| Transformers | native Bosun decision tokens | pinned base, PEFT adapter, tokenizer, decision-token rows, and remote model class |
 | Transformers | pointer head | backbone, optional LoRA, pointer tensors, and packing metadata |
 | Transformers | encoder-decoder margin | conditional-generation model plus declarative prompt, label, pooling, and aggregation metadata |
 | Transformers | scalar sequence classifier | backbone, optional PEFT adapter, per-candidate input templates, and calibration metadata |
@@ -51,6 +54,12 @@ not count as supported models.
 An execution backend runs the underlying neural network. A decision readout
 defines how the model represents candidates and turns its outputs into scores.
 Keeping these concerns separate lets model families reuse the same runtime.
+
+Bosun publishes a Transformers model class that reconstructs its pinned Qwen
+base, PEFT adapter, tokenizer, and learned decision-token rows. The runtime opts
+into that reviewed remote code, calls its candidate-aligned `predict` method,
+and translates the returned distribution into Jev `choice`, `score`, and
+`noul` answers. Registry entries pin the exact model revisions.
 
 Token-logit models expose one vocabulary token for each candidate. The runtime
 formats the prompt, reads the next-token logits for valid candidate tokens, and

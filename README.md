@@ -93,7 +93,7 @@ without replacing their decision API.
 | Backend | Model format | Built-in readouts |
 | --- | --- | --- |
 | llama.cpp | GGUF | token logits |
-| Hugging Face Transformers | Transformers checkpoints | token logits, pointer head, encoder-decoder margin, scalar sequence classifier, hidden-state probe |
+| Hugging Face Transformers | Transformers checkpoints | token logits, native Bosun decision tokens, pointer head, encoder-decoder margin, scalar sequence classifier, hidden-state probe |
 
 Backends execute the neural network; readouts convert model outputs into typed
 decision probabilities. See [models and backends](docs/MODELS.md) for supported

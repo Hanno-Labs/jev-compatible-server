@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import pytest
 
 from jev_compatible_server.encoder_decoder import MarginTask
@@ -121,7 +123,7 @@ def test_candidate_probe_scores_are_aggregated_into_choice_answer() -> None:
     }
     rendered: list[str] = []
 
-    def score_texts(texts: list[str]) -> tuple[list[float], list[int]]:
+    def score_texts(texts: Sequence[str]) -> tuple[list[float], list[int]]:
         rendered.extend(texts)
         return [2.0, 0.0], [12, 13]
 
