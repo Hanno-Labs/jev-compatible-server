@@ -107,6 +107,84 @@
         }
       }
     },
+    "sequence-classifier-native-scalar-v1": {
+      "decision": {
+        "readout": "sequence_classifier_margin",
+        "loader": {
+          "num_labels": 1
+        },
+        "input": {
+          "state_template": "State:\n{state}",
+          "tail_template": "\n\nQuestion:\n{instructions}\n\nOption:\n{option}",
+          "truncation": "preserve_tail",
+          "max_length": 512
+        },
+        "instruction_adapters": {
+          "choice": "",
+          "score": "",
+          "noul": ""
+        },
+        "candidates": {
+          "choice": {
+            "criterion_template": "{key}: {criterion}",
+            "empty_criterion_template": "{key}"
+          },
+          "score": {
+            "criterion_template": "{criterion}"
+          },
+          "noul": {
+            "no_criteria_options": {
+              "true": "yes",
+              "false": "no"
+            },
+            "criterion_template": "{criterion}"
+          }
+        },
+        "aggregation": {
+          "choice_temperature": 1.0,
+          "score_temperature": 1.0,
+          "noul_a": 1.0,
+          "noul_b": 0.0,
+          "confidence": "normalized_entropy"
+        },
+        "batch_size": 32
+      }
+    },
+    "cross-encoder-reranker-v1": {
+      "decision": {
+        "readout": "cross_encoder_margin",
+        "max_length": 512,
+        "batch_size": 16,
+        "instruction_adapters": {
+          "choice": "",
+          "score": "",
+          "noul": ""
+        },
+        "candidates": {
+          "choice": {
+            "criterion_template": "{key}: {criterion}",
+            "empty_criterion_template": "{key}"
+          },
+          "score": {
+            "criterion_template": "{criterion}"
+          },
+          "noul": {
+            "no_criteria_options": {
+              "true": "yes",
+              "false": "no"
+            },
+            "criterion_template": "{criterion}"
+          }
+        },
+        "aggregation": {
+          "choice_temperature": 1.0,
+          "score_temperature": 1.0,
+          "noul_a": 1.0,
+          "noul_b": 0.0,
+          "confidence": "normalized_entropy"
+        }
+      }
+    },
     "sequence-classifier-scalar-options-v1": {
       "decision": {
         "readout": "sequence_classifier_margin",
@@ -407,6 +485,17 @@
         "decision.readout": "option_marker_set_head"
       }
     },
+    "laya": {
+      "backend": "transformers",
+      "model": "convaiinnovations/laya",
+      "description": "Published Laya non-autoregressive typed-decision model",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision.readout": "laya_native",
+        "decision.question_types": ["choice", "score", "noul"]
+      }
+    },
     "vectara-hhem-2.1": {
       "backend": "transformers",
       "model": "vectara/hallucination_evaluation_model",
@@ -439,6 +528,48 @@
         "decision.question_types": ["choice", "score", "noul"],
         "decision.output": "option_probabilities"
       }
+    },
+    "bge-reranker-v2-m3": {
+      "backend": "transformers",
+      "model": "BAAI/bge-reranker-v2-m3",
+      "recipe": "sequence-classifier-native-scalar-v1",
+      "description": "BGE multilingual reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "gte-reranker-modernbert-base": {
+      "backend": "transformers",
+      "model": "Alibaba-NLP/gte-reranker-modernbert-base",
+      "recipe": "sequence-classifier-native-scalar-v1",
+      "description": "GTE ModernBERT reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "certo": {
+      "backend": "transformers",
+      "model": "altslate/certo-decision-model",
+      "recipe": "sequence-classifier-native-scalar-v1",
+      "description": "Certo decision classifier exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "mxbai-rerank-base-v2": {
+      "backend": "transformers",
+      "model": "mixedbread-ai/mxbai-rerank-base-v2",
+      "recipe": "cross-encoder-reranker-v1",
+      "description": "Mixedbread reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "qwen3-reranker-4b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3-Reranker-4B",
+      "recipe": "cross-encoder-reranker-v1",
+      "description": "Qwen3 reranker exposed as candidate scoring",
+      "support_status": "supported"
+    },
+    "zerank-2": {
+      "backend": "transformers",
+      "model": "zeroentropy/zerank-2-reranker",
+      "recipe": "cross-encoder-reranker-v1",
+      "description": "ZeroEntropy reranker exposed as candidate scoring",
+      "support_status": "supported"
     }
   }
 }

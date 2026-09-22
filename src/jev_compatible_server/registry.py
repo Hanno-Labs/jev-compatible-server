@@ -18,7 +18,9 @@ from .backends import (
     load_decision_config,
 )
 from .encoder_decoder import EncoderDecoderMarginBackend, decision_metadata
+from .cross_encoder import CrossEncoderBackend
 from .hidden_state_probe import HiddenStateProbeBackend
+from .laya import LayaBackend
 from .protocol import DecisionRequest, DecisionResponse, UnsupportedAnswer, Usage
 from .runtime import (
     DecisionRuntime,
@@ -121,28 +123,50 @@ class ModelRegistry:
 
 
 def build_transformers_runtime(
-    model_id: str, config: dict[str, Any]
+    model_id: str,
+    config: dict[str, Any],
+    *,
+    batch_size_override: int | None = None,
 ) -> DecisionRuntime:
     """Select a Transformers readout from metadata, never from a model name."""
 
-    readout = decision_metadata(config).get("readout")
+    effective_config = dict(config)
+    if batch_size_override is not None:
+        if isinstance(batch_size_override, bool) or batch_size_override <= 0:
+            raise RuntimeErrorBase("model batch size override must be a positive integer")
+        # Dotted metadata has highest precedence in decision_metadata(), so this
+        # overrides both nested and dotted registry recipe values without
+        # mutating the registry's reusable configuration.
+        effective_config["decision.batch_size"] = batch_size_override
+
+    readout = decision_metadata(effective_config).get("readout")
     if readout == "pointer_head":
-        return PointerTransformersBackend(model_id, config=config)
+        return PointerTransformersBackend(model_id, config=effective_config)
     if readout == "encoder_decoder_margin":
-        return EncoderDecoderMarginBackend(model_id, config=config)
+        return EncoderDecoderMarginBackend(model_id, config=effective_config)
     if readout == "sequence_classifier_margin":
-        return SequenceClassifierMarginBackend(model_id, config=config)
+        return SequenceClassifierMarginBackend(model_id, config=effective_config)
+    if readout == "cross_encoder_margin":
+        return CrossEncoderBackend(model_id, config=effective_config)
     if readout == "hidden_state_probe":
-        return HiddenStateProbeBackend(model_id, config=config)
-    return TransformersBackend(model_id, config=config)
+        return HiddenStateProbeBackend(model_id, config=effective_config)
+    if readout == "laya_native":
+        return LayaBackend(model_id, config=effective_config)
+    return TransformersBackend(model_id, config=effective_config)
 
 
 class RegistryRuntime(DecisionRuntime):
     """Lazy, cached runtime dispatch with per-model microbatching."""
 
-    def __init__(self, registry: ModelRegistry):
+    def __init__(
+        self,
+        registry: ModelRegistry,
+        *,
+        model_batch_size: int | None = None,
+    ):
         self.registry = registry
         self.model_name = registry.definition.default or "registry"
+        self.model_batch_size = model_batch_size
         self._runtimes: dict[str, DecisionRuntime] = {}
 
     def _runtime(self, name: str, entry: RegistryModel) -> DecisionRuntime:
@@ -163,7 +187,11 @@ class RegistryRuntime(DecisionRuntime):
                 "the MLX backend is registered but not installed in this service image"
             )
         else:
-            runtime = build_transformers_runtime(entry.model, config)
+            runtime = build_transformers_runtime(
+                entry.model,
+                config,
+                batch_size_override=self.model_batch_size,
+            )
         runtime = apply_question_type_support(runtime, config)
         self._runtimes[name] = runtime
         return runtime
