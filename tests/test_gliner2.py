@@ -18,17 +18,15 @@ class _FakeSchema:
     ) -> _FakeSchema:
         self.labels = list(labels)
         self.kind = "single"
-        self.instruction = kwargs.get("instruction") if isinstance(
-            kwargs.get("instruction"), str
-        ) else None
+        instruction = kwargs.get("instruction")
+        self.instruction = instruction if isinstance(instruction, str) else None
         return self
 
     def ordinal(self, _: str, labels: list[str], **kwargs: object) -> _FakeSchema:
         self.labels = labels
         self.kind = "ordinal"
-        self.instruction = kwargs.get("instruction") if isinstance(
-            kwargs.get("instruction"), str
-        ) else None
+        instruction = kwargs.get("instruction")
+        self.instruction = instruction if isinstance(instruction, str) else None
         return self
 
 
