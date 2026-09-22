@@ -22,6 +22,7 @@ from .causal_options import CausalOptionsBackend
 from .classifier_adapters import GLiClassCalibratedBackend, NLIEntailmentBackend
 from .cross_encoder import CrossEncoderBackend
 from .custom_heads import OpenJevScalarHeadBackend, SmallJevSemanticBackend
+from .decision_native import DecisionNativeRuntime
 from .encoder_decoder import EncoderDecoderMarginBackend, decision_metadata
 from .gliner2 import GLiNER2Runtime
 from .hidden_state_probe import HiddenStateProbeBackend
@@ -177,6 +178,8 @@ def build_transformers_runtime(
         return HiddenStateProbeBackend(model_id, config=effective_config)
     if readout == "laya_native":
         return LayaBackend(model_id, config=effective_config)
+    if readout == "decision_native":
+        return DecisionNativeRuntime(model_id, config=effective_config)
     if readout == "diffusion_structured_read":
         return DjevHTTPRuntime(model_id, config=effective_config)
     if readout == "diffusion_thinking_read":

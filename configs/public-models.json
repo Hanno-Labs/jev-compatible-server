@@ -1165,6 +1165,22 @@
         }
       }
     },
+    "decision-1.0-eos-0.8b": {
+      "backend": "transformers",
+      "model": "llm-semantic-router/Decision-1.0-Eos-0.8B",
+      "description": "Decision 1.0 Eos native typed decision head",
+      "support_status": "pending",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "decision_native",
+          "revision": "3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd",
+          "public_model_name": "decision-1.0-eos-0.8b",
+          "batch_size": 8,
+          "max_length": 16384
+        }
+      }
+    },
     "gliner2.5-base": {
       "backend": "transformers",
       "model": "fastino/gliner2.5-base-v1",
