@@ -5,7 +5,11 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from .encoder_decoder import aggregate_margin_answers, compile_margin_tasks, decision_metadata
+from .encoder_decoder import (
+    aggregate_margin_answers,
+    compile_margin_tasks,
+    decision_metadata,
+)
 from .protocol import DecisionRequest, DecisionResponse, Usage
 from .runtime import DecisionRuntime, RuntimeErrorBase
 

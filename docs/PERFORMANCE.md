@@ -19,6 +19,16 @@ Configuration:
 
 - `DECISION_MAX_BATCH_SIZE` defaults to `16`.
 - `DECISION_BATCH_WAIT_MS` defaults to `5`.
+- `--model-batch-size N` overrides the selected Transformers recipe's internal
+  `decision.batch_size` for model forward passes. `DECISION_MODEL_BATCH_SIZE`
+  provides the same override for environment-driven deployments. The command
+  line flag takes precedence over the environment variable.
+
+The request microbatch and model-forward batch are independent. Increasing
+`DECISION_MAX_BATCH_SIZE` alone does not increase a Transformers backend's
+forward batch. For offline evaluation, tune `--model-batch-size` against
+representative request lengths and choose the highest-throughput value with
+enough memory headroom; VRAM occupancy alone is not a throughput metric.
 
 This is dynamic request microbatching, not continuous token-level batching.
 Throughput, latency, and memory depend on the model, backend, hardware, request

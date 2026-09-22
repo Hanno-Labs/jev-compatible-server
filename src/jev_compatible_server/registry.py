@@ -17,10 +17,21 @@ from .backends import (
     TransformersBackend,
     load_decision_config,
 )
-from .encoder_decoder import EncoderDecoderMarginBackend, decision_metadata
+from .causal_options import CausalOptionsBackend
+from .classifier_adapters import GLiClassCalibratedBackend, NLIEntailmentBackend
 from .cross_encoder import CrossEncoderBackend
+from .custom_heads import OpenJevScalarHeadBackend, SmallJevSemanticBackend
+from .encoder_decoder import EncoderDecoderMarginBackend, decision_metadata
+from .gliner2 import GLiNER2Runtime
 from .hidden_state_probe import HiddenStateProbeBackend
 from .laya import LayaBackend
+from .native_systemone import (
+    DjevHTTPRuntime,
+    DjevThinkingRuntime,
+    JeffHTTPRuntime,
+    OpenJevThinkingHTTPRuntime,
+    WinnowHTTPRuntime,
+)
 from .protocol import DecisionRequest, DecisionResponse, UnsupportedAnswer, Usage
 from .runtime import (
     DecisionRuntime,
@@ -148,10 +159,35 @@ def build_transformers_runtime(
         return SequenceClassifierMarginBackend(model_id, config=effective_config)
     if readout == "cross_encoder_margin":
         return CrossEncoderBackend(model_id, config=effective_config)
+    if readout == "causal_options":
+        return CausalOptionsBackend(model_id, config=effective_config)
+    if readout == "nli_entailment":
+        return NLIEntailmentBackend(model_id, config=effective_config)
+    if readout == "gliclass_calibrated":
+        return GLiClassCalibratedBackend(model_id, config=effective_config)
+    if readout == "openjev_scalar_head":
+        return OpenJevScalarHeadBackend(model_id, config=effective_config)
+    if readout == "semantic_option_head":
+        return SmallJevSemanticBackend(model_id, config=effective_config)
     if readout == "hidden_state_probe":
         return HiddenStateProbeBackend(model_id, config=effective_config)
     if readout == "laya_native":
         return LayaBackend(model_id, config=effective_config)
+    if readout == "diffusion_structured_read":
+        return DjevHTTPRuntime(model_id, config=effective_config)
+    if readout == "diffusion_thinking_read":
+        native_contract = decision_metadata(effective_config).get("native_contract")
+        if native_contract == "djev":
+            return DjevThinkingRuntime(model_id, config=effective_config)
+        if native_contract == "openjev":
+            return OpenJevThinkingHTTPRuntime(model_id, config=effective_config)
+        raise RuntimeErrorBase(
+            "diffusion_thinking_read requires decision.native_contract of 'djev' or 'openjev'"
+        )
+    if readout == "gliformer_native":
+        return JeffHTTPRuntime(model_id, config=effective_config)
+    if readout == "gliner2_multilabel":
+        return GLiNER2Runtime(model_id, config=effective_config)
     return TransformersBackend(model_id, config=effective_config)
 
 
@@ -181,7 +217,10 @@ class RegistryRuntime(DecisionRuntime):
         config = entry.resolved_config(recipe_config)
         runtime: DecisionRuntime
         if entry.backend == "llama":
-            runtime = LlamaBackend(entry.model, config=config)
+            if decision_metadata(config).get("readout") == "winnow_shared_branch":
+                runtime = WinnowHTTPRuntime(entry.model, config=config)
+            else:
+                runtime = LlamaBackend(entry.model, config=config)
         elif entry.backend == "mlx":
             raise RuntimeErrorBase(
                 "the MLX backend is registered but not installed in this service image"
