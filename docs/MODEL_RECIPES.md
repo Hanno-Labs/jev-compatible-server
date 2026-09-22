@@ -172,6 +172,8 @@ DECISION_REGISTRY=/path/to/registry.json jev-compatible-server
 ```
 
 Registry entries are loaded on first use and cached for later requests.
+Pass `--model ALIAS` to load one registry entry at startup and reject requests
+for any other alias.
 
 ## Single-model configuration
 

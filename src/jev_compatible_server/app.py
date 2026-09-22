@@ -41,12 +41,17 @@ def _model_batch_size_override(explicit: int | None = None) -> int | None:
         ) from exc
 
 
-def build_runtime(*, model_batch_size: int | None = None) -> DecisionRuntime:
+def build_runtime(
+    *,
+    model: str | None = None,
+    model_batch_size: int | None = None,
+) -> DecisionRuntime:
     model_batch_size = _model_batch_size_override(model_batch_size)
     registry_path = os.environ.get("DECISION_REGISTRY")
     if registry_path:
         return RegistryRuntime(
             ModelRegistry.from_file(registry_path),
+            pinned_model=model,
             model_batch_size=model_batch_size,
         )
     explicit_model = os.environ.get("DECISION_MODEL_ID") or os.environ.get(
@@ -55,7 +60,13 @@ def build_runtime(*, model_batch_size: int | None = None) -> DecisionRuntime:
     if not explicit_model and "DECISION_BACKEND" not in os.environ:
         return RegistryRuntime(
             ModelRegistry.from_builtin(),
+            pinned_model=model,
             model_batch_size=model_batch_size,
+        )
+    if model is not None:
+        raise RuntimeErrorBase(
+            "--model cannot be combined with DECISION_BACKEND, "
+            "DECISION_MODEL_ID, or DECISION_MODEL_PATH"
         )
     backend = os.environ.get("DECISION_BACKEND", "transformers").lower()
     config_path = os.environ.get("DECISION_CONFIG")
@@ -85,9 +96,13 @@ def build_runtime(*, model_batch_size: int | None = None) -> DecisionRuntime:
 def create_app(
     runtime: DecisionRuntime | None = None,
     *,
+    model: str | None = None,
     model_batch_size: int | None = None,
 ) -> FastAPI:
-    selected_runtime = runtime or build_runtime(model_batch_size=model_batch_size)
+    selected_runtime = runtime or build_runtime(
+        model=model,
+        model_batch_size=model_batch_size,
+    )
     batcher = DecisionBatcher(
         selected_runtime,
         max_batch_size=int(os.environ.get("DECISION_MAX_BATCH_SIZE", "16")),
@@ -129,6 +144,13 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     parser = argparse.ArgumentParser(description="Serve a Jev-compatible decision API")
     parser.add_argument(
+        "--model",
+        help=(
+            "pin and load one registry model at startup, "
+            "for example bosun-v3.1-0.6b"
+        ),
+    )
+    parser.add_argument(
         "--model-batch-size",
         type=_positive_batch_size,
         help=(
@@ -138,7 +160,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
     uvicorn.run(
-        create_app(model_batch_size=args.model_batch_size),
+        create_app(model=args.model, model_batch_size=args.model_batch_size),
         host="0.0.0.0",
         port=8000,
     )
