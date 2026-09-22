@@ -25,6 +25,7 @@ from .custom_heads import OpenJevScalarHeadBackend, SmallJevSemanticBackend
 from .encoder_decoder import EncoderDecoderMarginBackend, decision_metadata
 from .gliner2 import GLiNER2Runtime
 from .hidden_state_probe import HiddenStateProbeBackend
+from .jev_local_options import JevLocalOptionsBackend
 from .laya import LayaBackend
 from .native_systemone import (
     DjevHTTPRuntime,
@@ -191,6 +192,8 @@ def build_transformers_runtime(
         return JeffHTTPRuntime(model_id, config=effective_config)
     if readout == "gliner2_multilabel":
         return GLiNER2Runtime(model_id, config=effective_config)
+    if readout == "jev_local_options":
+        return JevLocalOptionsBackend(model_id, config=effective_config)
     return TransformersBackend(model_id, config=effective_config)
 
 

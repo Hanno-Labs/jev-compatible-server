@@ -28,6 +28,7 @@ class OptionPrompt:
     prompt: str
     labels: dict[str, str]
     suffixes: dict[str, str]
+    add_special_tokens: bool = False
 
 
 def option_letter(index: int) -> str:
@@ -86,7 +87,13 @@ class CausalOptionsBackend(DecisionRuntime):
         if isinstance(loader.get("attn_implementation"), str): kwargs["attn_implementation"] = loader["attn_implementation"]
         if loader.get("dtype") in {"bf16", "bfloat16"}: kwargs["torch_dtype"] = torch.bfloat16
         if loader.get("dtype") in {"fp16", "float16"}: kwargs["torch_dtype"] = torch.float16
-        cls = AutoModelForImageTextToText if AutoConfig.from_pretrained(base, **common).model_type == "qwen3_5" else AutoModelForCausalLM
+        model_type = AutoConfig.from_pretrained(base, **common).model_type
+        text_only = {"semif", "open_alternative", "decider"}
+        cls = (
+            AutoModelForImageTextToText
+            if model_type == "qwen3_5" and self._profile() not in text_only
+            else AutoModelForCausalLM
+        )
         self._model = cls.from_pretrained(base, **kwargs)
         adapter = loader.get("adapter", self.metadata.get("adapter"))
         if adapter:
@@ -102,13 +109,11 @@ class CausalOptionsBackend(DecisionRuntime):
 
     def _profile(self) -> str:
         profile = self.metadata.get("profile", "generic")
-        if not isinstance(profile, str) or profile not in {
-            "generic",
-            "jqv",
-            "litjev",
-            "reflex",
-            "simplejev_v1",
-        }:
+        supported = {
+            "generic", "jqv", "litjev", "reflex", "simplejev_v1", "semif",
+            "open_alternative", "decider", "system_one_open",
+        }
+        if not isinstance(profile, str) or profile not in supported:
             raise RuntimeErrorBase("unknown decision.profile")
         return profile
 
@@ -119,7 +124,8 @@ class CausalOptionsBackend(DecisionRuntime):
         return float(value)
 
     def _two_orders(self) -> bool:
-        # Reflex's published readout always averages the two semantic orders.
+        # Reflex's reported protocol always averages both semantic orders;
+        # allowing a false override would silently change its published readout.
         if self._profile() == "reflex":
             return True
         value = self.metadata.get("two_order_aggregation", self.metadata.get("two_orders"))
@@ -139,6 +145,14 @@ class CausalOptionsBackend(DecisionRuntime):
         values = _ids(question); values = list(reversed(values)) if reverse else values
         return {option_letter(i): value for i, value in enumerate(values)}
 
+    def _profile_labels(self, question: Any, reverse: bool) -> dict[str, str]:
+        if self._profile() in {"decider", "system_one_open"} and isinstance(question, NoulQuestion):
+            values = ["false", "true"]
+            if reverse:
+                values.reverse()
+            return {option_letter(index): value for index, value in enumerate(values)}
+        return self._labels(question, reverse)
+
     def _chat(self, messages: list[dict[str, str]], prefill: str) -> str:
         try:
             text = self._tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
@@ -147,7 +161,103 @@ class CausalOptionsBackend(DecisionRuntime):
         return text + prefill
 
     def _compile(self, request: DecisionRequest, name: str, question: Any, reverse: bool = False) -> OptionPrompt:
-        profile = self._profile(); labels = self._labels(question, reverse)
+        profile = self._profile(); labels = self._profile_labels(question, reverse)
+        if profile == "semif":
+            if len(labels) > 16:
+                raise RuntimeErrorBase("semif supports at most 16 options")
+            payload = {
+                "evidence": request.state,
+                "criterion": question.instructions,
+                "options": [
+                    {"letter": label, "description": self._text(question, option)}
+                    for label, option in labels.items()
+                ],
+            }
+            prompt = self._chat(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Apply the supplied criterion to the supplied evidence. "
+                            "Choose exactly one listed option. Respond with only its "
+                            "uppercase letter, with no explanation or reasoning."
+                        ),
+                    },
+                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                ],
+                "",
+            )
+            return OptionPrompt(prompt, labels, {label: label for label in labels})
+        if profile == "open_alternative":
+            if len(labels) > 26:
+                raise RuntimeErrorBase("open_alternative supports at most 26 options")
+            lines = [
+                "Choose the correct option. Reply with only its letter.",
+                "",
+                "Context:",
+                render_content(request.state),
+                "",
+                f"Question: {render_content(question.instructions)}",
+            ]
+            lines.extend(
+                f"{label}. {self._text(question, option)}"
+                for label, option in labels.items()
+            )
+            prompt = self._chat([{"role": "user", "content": "\n".join(lines)}], "")
+            return OptionPrompt(prompt, labels, {label: label for label in labels})
+        if profile == "decider":
+            if len(labels) > 255:
+                raise RuntimeErrorBase("decider supports at most 255 options")
+            if isinstance(question, ScoreQuestion) and len(labels) > 10:
+                raise RuntimeErrorBase("decider supports at most 10 score levels")
+            lines = [
+                f"Context:\n{render_content(request.state)}",
+                f"\nQuestion: {render_content(question.instructions)}",
+                "Options:",
+            ]
+            for label, option in labels.items():
+                if isinstance(question, ChoiceQuestion):
+                    value = question.criteria[option]
+                    text = option if value in (None, "") else f"{option}: {render_content(value)}"
+                elif isinstance(question, ScoreQuestion):
+                    text = f"{option}: {self._text(question, option)}"
+                elif option == "false":
+                    text = "no" if question.criteria is None else f"no: {self._text(question, option)}"
+                else:
+                    text = "yes" if question.criteria is None else f"yes: {self._text(question, option)}"
+                lines.append(f"({label}) {text}")
+            return OptionPrompt(
+                "\n".join(lines) + "\nAnswer: (",
+                labels,
+                {label: label for label in labels},
+            )
+        if profile == "system_one_open":
+            if len(labels) > 52:
+                raise RuntimeErrorBase("system_one_open supports at most 52 options")
+            kind, heading = "choice", "Options:"
+            if isinstance(question, ScoreQuestion):
+                kind, heading = "score", "Levels:"
+            elif isinstance(question, NoulQuestion):
+                kind, heading = "yes/no", ""
+            lines = [
+                "<state>",
+                render_content(request.state),
+                "</state>",
+                f"Question ({kind}): {render_content(question.instructions)}",
+            ]
+            if heading:
+                lines.append(heading)
+            for label, option in labels.items():
+                if isinstance(question, ChoiceQuestion) and question.criteria[option] is not None:
+                    lines.append(f"({label}) {option} — {self._text(question, option)}")
+                else:
+                    lines.append(f"({label}) {self._text(question, option)}")
+            return OptionPrompt(
+                "\n".join(lines) + "\nAnswer: (",
+                labels,
+                {label: label for label in labels},
+                add_special_tokens=True,
+            )
         if profile == "jqv":
             state = request.state if isinstance(request.state, str) else _json(request.state)
             opts = "\n".join(f"{k}. {self._text(question, v)}" for k, v in labels.items())
@@ -190,16 +300,20 @@ class CausalOptionsBackend(DecisionRuntime):
         return OptionPrompt(prompt, labels, {k: k for k in labels})
 
     def _token_ids(self, compiled: OptionPrompt) -> dict[str, int]:
-        base = self._tokenizer.encode(compiled.prompt, add_special_tokens=False); result: dict[str, int] = {}
+        base = self._tokenizer.encode(
+            compiled.prompt, add_special_tokens=compiled.add_special_tokens
+        ); result: dict[str, int] = {}
         for label, suffix in compiled.suffixes.items():
-            after = self._tokenizer.encode(compiled.prompt + suffix, add_special_tokens=False)
+            after = self._tokenizer.encode(
+                compiled.prompt + suffix, add_special_tokens=compiled.add_special_tokens
+            )
             if len(after) != len(base) + 1 or after[:-1] != base: raise RuntimeErrorBase(f"decision label {label!r} is not a one-token continuation at its prompt boundary")
             result[label] = int(after[-1])
         if len(set(result.values())) != len(result): raise RuntimeErrorBase("decision labels collide at prompt boundary")
         return result
 
     def _score(self, compiled: OptionPrompt) -> dict[str, float]:
-        ids = self._token_ids(compiled); encoded = self._tokenizer(compiled.prompt, return_tensors="pt"); device = next(self._model.parameters()).device; encoded = {k: v.to(device) for k, v in encoded.items()}
+        ids = self._token_ids(compiled); encoded = self._tokenizer(compiled.prompt, return_tensors="pt", add_special_tokens=compiled.add_special_tokens); device = next(self._model.parameters()).device; encoded = {k: v.to(device) for k, v in encoded.items()}
         context = self._torch.inference_mode() if hasattr(self._torch, "inference_mode") else nullcontext()
         with context: output = self._model(**encoded)
         pos = int(encoded["attention_mask"][0].sum().item()) - 1 if "attention_mask" in encoded else -1; row = output.logits[0, pos]
@@ -215,6 +329,11 @@ class CausalOptionsBackend(DecisionRuntime):
     def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
         responses: list[DecisionResponse] = []
         for request in requests:
+            if self._profile() == "system_one_open" and len(request.questions) != 1:
+                raise RuntimeErrorBase(
+                    "system_one_open requires its packed multi-question slot readout; "
+                    "submit exactly one question per request"
+                )
             answers: dict[str, Any] = {}
             for name, question in request.questions.items():
                 if self._profile() == "simplejev_v1" and isinstance(question, NoulQuestion):

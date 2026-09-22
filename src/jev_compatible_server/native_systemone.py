@@ -206,18 +206,37 @@ class DjevHTTPRuntime(NativeSystemOneHTTPRuntime):
         return body
 
 
-class DjevThinkingRuntime(DecisionRuntime):
-    """Reject the unshipped DJeV thinking variant without fabricating a readout."""
+class DjevThinkingRuntime(NativeSystemOneHTTPRuntime):
+    """DJeV Spark's ``think`` extension over its typed ``/v1/systemone`` API.
 
-    def __init__(self, model_id: str, *, config: Mapping[str, Any] | None = None) -> None:
-        del config
-        self.model_name = model_id
+    The separate DJeV Spark server writes an optional bounded thought before a
+    structured read, then returns only the normal typed response.  It is a
+    distinct public contract from djev-dev's ``/v1/request`` service.
+    """
 
-    def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
-        del requests
-        raise RuntimeErrorBase(
-            "DJeV publishes no thinking inference contract; the public runtime exposes only structured reads"
-        )
+    def __init__(
+        self,
+        model_id: str,
+        *,
+        config: Mapping[str, Any] | None = None,
+        post_json: PostJSON | None = None,
+    ) -> None:
+        super().__init__(model_id, config=config, post_json=post_json)
+        if not self.endpoint.rstrip("/").endswith("/v1/systemone"):
+            raise RuntimeErrorBase(
+                "djev_thinking requires decision.endpoint ending in /v1/systemone"
+            )
+        if "think" not in self.request_fields:
+            raise RuntimeErrorBase(
+                "djev_thinking requires decision.request_fields.think as a token budget"
+            )
+        think = self.request_fields["think"]
+        if (
+            isinstance(think, bool)
+            or not isinstance(think, int)
+            or not 0 <= think <= 4096
+        ):
+            raise RuntimeErrorBase("DJeV think must be an integer from 0 through 4096")
 
 
 class OpenJevThinkingHTTPRuntime(NativeSystemOneHTTPRuntime):
@@ -236,7 +255,11 @@ class OpenJevThinkingHTTPRuntime(NativeSystemOneHTTPRuntime):
                 "openjev_thinking requires decision.request_fields.think as a token budget"
             )
         think = self.request_fields["think"]
-        if isinstance(think, bool) or not isinstance(think, int) or not 0 <= think <= 4096:
+        if (
+            isinstance(think, bool)
+            or not isinstance(think, int)
+            or not 0 <= think <= 4096
+        ):
             raise RuntimeErrorBase("OpenJev think must be an integer from 0 through 4096")
 
 
