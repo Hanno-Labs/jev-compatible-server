@@ -141,6 +141,17 @@ class GLiNER2Runtime(DecisionRuntime):
         self._classifier = classifier_type.from_pretrained(
             self.model_name, **dict(load_options)
         )
+        device = load_options.get("device")
+        if device is None:
+            try:
+                torch_module = importlib.import_module("torch")
+                device = "cuda" if torch_module.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+        to_options: dict[str, Any] = {"device": device}
+        if "dtype" in load_options:
+            to_options["dtype"] = load_options["dtype"]
+        self._classifier.to(**to_options)
         return self._classifier
 
     def _new_schema(self) -> Any:
@@ -200,9 +211,12 @@ class GLiNER2Runtime(DecisionRuntime):
             supported_types=_SUPPORTED_TYPES,
         )
 
-    def _answer(self, state: str, question: Question) -> Answer:
-        schema, labels = self._schema_for_question(question)
-        scores = self._classifier_instance().score(state, schema)
+    def _answer_from_scores(
+        self,
+        question: Question,
+        labels: Sequence[str],
+        scores: Any,
+    ) -> Answer:
         probabilities = _finite_distribution(scores, labels)
         if isinstance(question, ChoiceQuestion):
             choice = max(probabilities, key=probabilities.__getitem__)
@@ -228,21 +242,49 @@ class GLiNER2Runtime(DecisionRuntime):
         raise RuntimeErrorBase(f"unsupported question type: {type(question).__name__}")
 
     def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
-        responses: list[DecisionResponse] = []
-        for request in requests:
-            answers: dict[str, Answer] = {}
+        answers_by_request: list[dict[str, Answer]] = [{} for _ in requests]
+        grouped: dict[str, list[tuple[int, str, str, Question, list[str], Any]]] = {}
+        classifier: Any | None = None
+        for request_index, request in enumerate(requests):
             try:
                 state = _render_content(request.state, "state", schema_value=False)
             except _UnexpressibleQuestion:
                 for name, question in request.questions.items():
-                    answers[name] = self._unsupported(question)
+                    answers_by_request[request_index][name] = self._unsupported(question)
             else:
                 for name, question in request.questions.items():
                     try:
-                        answers[name] = self._answer(state, question)
+                        schema, labels = self._schema_for_question(question)
+                        if classifier is None:
+                            classifier = self._classifier_instance()
+                        fingerprint = classifier.compile_schema(schema).fingerprint
+                        grouped.setdefault(fingerprint, []).append(
+                            (request_index, name, state, question, labels, schema)
+                        )
                     except _UnexpressibleQuestion:
-                        answers[name] = self._unsupported(question)
-            responses.append(
-                DecisionResponse(model=self.model_name, answers=answers, usage=Usage())
-            )
-        return responses
+                        answers_by_request[request_index][name] = self._unsupported(question)
+
+        if grouped:
+            module: Any = importlib.import_module("gliner2.classification")
+            batch_size = _decision_value(self.config, "batch_size", 8)
+            if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size <= 0:
+                raise RuntimeErrorBase("decision.batch_size must be a positive integer")
+            batch_config = module.ClassificationConfig(batch_size=batch_size)
+            assert classifier is not None
+            for items in grouped.values():
+                scores = classifier.batch_score(
+                    [item[2] for item in items],
+                    items[0][5],
+                    config=batch_config,
+                )
+                for (request_index, name, _, question, labels, _), score in zip(
+                    items, scores, strict=True
+                ):
+                    answers_by_request[request_index][name] = self._answer_from_scores(
+                        question, labels, score
+                    )
+
+        return [
+            DecisionResponse(model=self.model_name, answers=answers, usage=Usage())
+            for answers in answers_by_request
+        ]
