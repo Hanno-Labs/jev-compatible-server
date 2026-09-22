@@ -63,6 +63,17 @@ class DecisionBatcher:
                     raise RuntimeError("runtime returned the wrong batch length")
                 for item, response in zip(batch, responses, strict=True):
                     item.future.set_result(response)
-            except Exception as exc:  # noqa: BLE001 - propagate backend failures to every future
+            except Exception as exc:  # noqa: BLE001 - retry to isolate request failures
+                if len(batch) == 1:
+                    batch[0].future.set_exception(exc)
+                    continue
                 for item in batch:
-                    item.future.set_exception(exc)
+                    try:
+                        responses = await asyncio.to_thread(
+                            self.runtime.decide_batch, [item.request]
+                        )
+                        if len(responses) != 1:
+                            raise RuntimeError("runtime returned the wrong batch length")
+                        item.future.set_result(responses[0])
+                    except Exception as item_exc:  # noqa: BLE001 - isolate request failures
+                        item.future.set_exception(item_exc)

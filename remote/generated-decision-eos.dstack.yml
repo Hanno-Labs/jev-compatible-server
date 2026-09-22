@@ -1,0 +1,39 @@
+type: task
+name: db-decision-eos-23900-20260922-r1
+fleets: [default]
+spot_policy: on-demand
+image: pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime
+shell: bash
+max_duration: 12h
+stop_duration: 5m
+files:
+  - ./run_registry_decisionbench.sh:/workflow/run_registry_decisionbench.sh
+  - ./chunked_results.sh:/workflow/chunked_results.sh
+  - ../pyproject.toml:/workflow/jev-compatible-server/pyproject.toml
+  - ../src:/workflow/jev-compatible-server/src
+  - ../configs/public-models.json:/workflow/jev-compatible-server/configs/public-models.json
+  - ../configs/public-models.json:/workflow/public-models.json
+env:
+  - HF_TOKEN=${{ secrets.hf_token }}
+  - SOURCE_ARCHIVE=hf://buckets/Hanno-Labs/jobs-artifacts/decision-bench-runtime-jev-server-20260920-r5.tgz
+  - RESULTS_BUCKET=hf://buckets/Hanno-Labs/training/decision-bench/runs/decision-eos-23900-20260922-r1
+  - DECISION_REGISTRY=/workflow/public-models.json
+  - MODEL_KEY=decision-1.0-eos-0.8b
+  - MODEL_BATCH_SIZE=8
+  - EVAL_CONCURRENCY=8
+  - DECISION_NATIVE_EOS=1
+  - RESULTS_CHUNK_ROWS=1000
+  - RESULTS_CHUNK_INTERVAL_SECONDS=300
+retry:
+  on_events: [no-capacity, interruption, error]
+  duration: 12h
+commands:
+  - apt-get update -qq && apt-get install -y -qq jq curl
+  - pip install -U uv "hf>=1.23" "huggingface_hub>=1.23" hf_xet
+  - bash /workflow/run_registry_decisionbench.sh
+resources:
+  gpu:
+    name: [L40S, A100, H100, H200, B200]
+    count: 1
+    memory: 40GB..
+  disk: 200GB..

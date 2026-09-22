@@ -22,6 +22,10 @@ bash "$chunk_helper" restore "$remote_result_dir" "$result_dir"
 
 uv sync --directory "$source_root" --extra hf
 uv pip install --python "$source_root/.venv/bin/python" "$server_root[transformers]"
+if [[ "${DECISION_NATIVE_EOS:-0}" == "1" ]]; then
+  uv pip install --python "$source_root/.venv/bin/python" \
+    'torch==2.9.1' 'transformers==5.17.0' 'flash-linear-attention==0.5.2'
+fi
 
 cleanup() {
   if [[ -n "${chunk_pid:-}" ]]; then
@@ -77,7 +81,16 @@ DECISION_REGISTRY="$DECISION_REGISTRY" \
 server_pid=$!
 wait_for_server
 
-(cd "$source_root" && uv run python -m decision_bench.cli run-jev-server \
+if [[ "${DECISION_NATIVE_EOS:-0}" == "1" ]]; then
+  curl -fsS --max-time 180 \
+    -H 'Content-Type: application/json' \
+    -d '{"model":"decision-1.0-eos-0.8b","state":"A customer needs help with a billing issue.","questions":{"route":{"type":"choice","instructions":"Choose the support route.","criteria":{"self":"Self service","human":"Human support"}}}}' \
+    http://127.0.0.1:8000/v1/systemone \
+    | jq -e '.answers.route.type == "choice" and (.answers.route.probabilities | keys == ["human", "self"])' >/dev/null
+  echo 'DECISION_BENCH_NATIVE_PROBE_COMPLETE model=decision-1.0-eos-0.8b' >&2
+fi
+
+(cd "$source_root" && "$source_root/.venv/bin/python" -m decision_bench.cli run-jev-server \
   "$source_root/task_specs/decisionbench-dev.toml" "$result_dir" \
   --project-root "$source_root" --base-url http://127.0.0.1:8000 \
   --model "$MODEL_KEY" --concurrency "${EVAL_CONCURRENCY:-8}")

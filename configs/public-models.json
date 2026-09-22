@@ -1165,6 +1165,22 @@
         }
       }
     },
+    "decision-1.0-eos-0.8b": {
+      "backend": "transformers",
+      "model": "llm-semantic-router/Decision-1.0-Eos-0.8B",
+      "description": "Decision 1.0 Eos native typed decision head",
+      "support_status": "pending",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "decision_native",
+          "revision": "3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd",
+          "public_model_name": "decision-1.0-eos-0.8b",
+          "batch_size": 8,
+          "max_length": 16384
+        }
+      }
+    },
     "gliner2.5-base": {
       "backend": "transformers",
       "model": "fastino/gliner2.5-base-v1",
@@ -1174,6 +1190,7 @@
       "config": {
         "decision": {
           "readout": "gliner2_multilabel",
+          "batch_size": 8,
           "gliner2_load_options": {
             "revision": "1a8bc24e00dc7300b9017c81d63e3dcdabb26596"
           }
@@ -1189,6 +1206,7 @@
       "config": {
         "decision": {
           "readout": "gliner2_multilabel",
+          "batch_size": 8,
           "gliner2_load_options": {
             "revision": "f32ea6ef6e26d8264fdc72431b4b3b041eadc537"
           }
@@ -1204,6 +1222,7 @@
       "config": {
         "decision": {
           "readout": "gliner2_multilabel",
+          "batch_size": 8,
           "gliner2_load_options": {
             "revision": "a221b77a8baf4a613b8f8652661d41fa10a5641e"
           }
@@ -1219,6 +1238,7 @@
       "config": {
         "decision": {
           "readout": "gliner2_multilabel",
+          "batch_size": 8,
           "gliner2_load_options": {
             "revision": "7e6f537f10337497069276892a5ef435028252ce"
           }
