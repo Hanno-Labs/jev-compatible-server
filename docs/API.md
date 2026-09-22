@@ -136,7 +136,8 @@ Darwin's own forthcoming answer rather than scoring an external candidate.
 
 ## Model selection
 
-The optional top-level `model` selects an enabled registry entry. When omitted,
+The optional top-level `model` selects an enabled
+[registry alias](MODELS.md#model-aliases). When omitted,
 the registry's `default` entry is used. Start the server with `--model ALIAS` to
 load and pin one registry entry before serving; requests may then omit `model`
 or name that same alias. Requests naming another model return HTTP `422`.

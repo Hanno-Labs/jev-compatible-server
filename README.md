@@ -41,10 +41,11 @@ curl http://localhost:8000/v1/systemone \
   }'
 ```
 
-`--model` pins one bundled registry entry, downloads it from Hugging Face when
-needed, and loads it before the server begins accepting requests. Requests may
-omit `model`; the server rejects a request that names a different model. See the
-[API reference](docs/API.md) for all question and response types.
+`--model` takes a [bundled registry alias](docs/MODELS.md#model-aliases), such as
+`bosun-v3.1-0.6b` for `Hanno-Labs/bosun-v3.1-0.6b`. It downloads the model from
+Hugging Face when needed and loads it before the server accepts requests.
+Requests may omit `model`; the server rejects a request that names a different
+model. See the [API reference](docs/API.md) for question and response types.
 
 ## Installation
 
