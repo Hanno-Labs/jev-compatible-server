@@ -17,7 +17,7 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then star
 the server with the Transformers backend:
 
 ```bash
-uvx --from 'jev-compatible-server[transformers] @ git+https://github.com/Hanno-Labs/jev-compatible-server.git' jev-compatible-server
+uvx --from 'jev-compatible-server[transformers]' jev-compatible-server
 ```
 
 Send a decision request to `POST /v1/systemone`:
@@ -51,12 +51,12 @@ Select the extra for the inference backend you need:
 
 ```bash
 # Hugging Face Transformers models
-uvx --from 'jev-compatible-server[transformers] @ git+https://github.com/Hanno-Labs/jev-compatible-server.git' jev-compatible-server
+uvx --from 'jev-compatible-server[transformers]' jev-compatible-server
 
 # llama.cpp/GGUF models
 DECISION_BACKEND=llama \
 DECISION_MODEL_PATH=/path/to/model.gguf \
-uvx --from 'jev-compatible-server[llama] @ git+https://github.com/Hanno-Labs/jev-compatible-server.git' jev-compatible-server
+uvx --from 'jev-compatible-server[llama]' jev-compatible-server
 ```
 
 The bundled public-model registry is used by default. Custom GGUF models and
