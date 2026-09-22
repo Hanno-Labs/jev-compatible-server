@@ -570,6 +570,134 @@
       "recipe": "cross-encoder-reranker-v1",
       "description": "ZeroEntropy reranker exposed as candidate scoring",
       "support_status": "supported"
+    },
+    "jqv": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3-32B",
+      "description": "JQV option-letter logit judge; requires packed shared-attention readout",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "option_letter_logits"}
+    },
+    "litjev": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.8-27B",
+      "description": "LitJev native output-head decision logits",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "native_output_head"}
+    },
+    "djev": {
+      "backend": "transformers",
+      "model": "google/diffusiongemma-26B-A4B-it",
+      "description": "DJeV structured DiffusionGemma decision distribution",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "diffusion_structured_read"}
+    },
+    "djev-thinking": {
+      "backend": "transformers",
+      "model": "google/diffusiongemma-26B-A4B-it",
+      "description": "DJeV thinking variant with staged thought and distribution readout",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "diffusion_thinking_read"}
+    },
+    "jeff": {
+      "backend": "transformers",
+      "model": "knowledgator/gliformer-large-v1",
+      "description": "Jeff GLiFormer native system-one decision service",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "gliformer_native"}
+    },
+    "open-jev-zefan-2b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.5-2B",
+      "description": "Open-Jev 2B packaged LoRA plus calibrated scalar head",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "openjev_scalar_head"}
+    },
+    "open-jev-zefan-9b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.5-9B",
+      "description": "Open-Jev 9B packaged LoRA plus calibrated scalar head",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "openjev_scalar_head"}
+    },
+    "opendecision": {
+      "backend": "transformers",
+      "model": "MoritzLaurer/ModernBERT-large-zeroshot-v2.0",
+      "description": "OpenDecision NLI entailment candidate scorer",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "nli_entailment"}
+    },
+    "openjev-thinking": {
+      "backend": "transformers",
+      "model": "google/diffusiongemma-26b-a4b-it",
+      "description": "OpenJev thinking DiffusionGemma typed server",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "diffusion_thinking_read"}
+    },
+    "openjev-verdict": {
+      "backend": "transformers",
+      "model": "heman10x/rlcd-modernbert-151m",
+      "description": "OpenJev Verdict GLiClass distribution and calibrator",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "gliclass_calibrated"}
+    },
+    "reflex-4b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.5-4B",
+      "description": "Reflex 4B LoRA decision logits with two-order aggregation",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "causal_two_order"}
+    },
+    "reflex-27b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.8-27B",
+      "description": "Reflex 27B direct decision logits with two-order aggregation",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "causal_two_order"}
+    },
+    "simplejev-qwen3.6-35b-a3b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.6-35B-A3B",
+      "description": "SimpleJev Qwen3.6 direct next-token decision logits",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "causal_option_logits"}
+    },
+    "simplejev-qwen3.8-27b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.8-27B",
+      "description": "SimpleJev Qwen3.8 direct next-token decision logits",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "causal_option_logits"}
+    },
+    "smalljev": {
+      "backend": "transformers",
+      "model": "openbmb/MiniCPM5-2B-Base",
+      "description": "SmallJev semantic option scorer with LoRA and calibration head",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "semantic_option_head"}
+    },
+    "winnow-12b": {
+      "backend": "llama",
+      "model": "EldanRing/Winnow-12B-Q8_0.gguf",
+      "description": "Winnow shared-branch llama.cpp decision server",
+      "support_status": "pending",
+      "enabled": false,
+      "config": {"decision.readout": "winnow_shared_branch"}
     }
   }
 }
