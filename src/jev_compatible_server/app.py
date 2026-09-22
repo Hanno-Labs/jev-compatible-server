@@ -16,7 +16,6 @@ from .protocol import DecisionRequest, DecisionResponse
 from .registry import ModelRegistry, RegistryRuntime, build_transformers_runtime
 from .runtime import DecisionRuntime, RuntimeErrorBase, apply_question_type_support
 
-
 logger = logging.getLogger(__name__)
 
 
