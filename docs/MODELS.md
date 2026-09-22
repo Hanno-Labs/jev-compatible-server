@@ -5,36 +5,83 @@ The bundled registry is defined in
 are enabled; catalogued models whose native readouts are not implemented remain
 explicitly disabled.
 
-## Supported models
+## Model aliases
 
-| Model | Backend | Readout | Question types |
-| --- | --- | --- | --- |
-| `Hanno-Labs/bosun-v3.1-0.6b` | Transformers | native Bosun decision tokens | `choice`, `score`, `noul` |
-| `Hanno-Labs/bosun-v3.1-1.7b` | Transformers | native Bosun decision tokens | `choice`, `score`, `noul` |
-| `jaredpalmer/kev-0.5b` | Transformers | pointer head | `choice`, `score`, `noul` |
-| `jaredpalmer/kev-0.6b` | Transformers | pointer head | `choice`, `score`, `noul` |
-| `jaredpalmer/kev-4b` | Transformers | pointer head | `choice`, `score`, `noul` |
-| `jaredpalmer/kev-8b` | Transformers | pointer head | `choice`, `score`, `noul` |
-| `KaLM-Embedding/KaLM-Reranker-V1-Nano-R2` | Transformers | encoder-decoder margin | `choice`, `score`, `noul` |
-| `KaLM-Embedding/KaLM-Reranker-V1-Small-R2` | Transformers | encoder-decoder margin | `choice`, `score`, `noul` |
-| `KaLM-Embedding/KaLM-Reranker-V1-Large-R2` | Transformers | encoder-decoder margin | `choice`, `score`, `noul` |
-| `pngwn/system-one-qwen3.5-4b-scorer` | Transformers | scalar sequence classifier | `choice`, `score`, `noul` |
-| `FINAL-Bench/ZTC-Judge-4B` | Transformers | candidate verifier plus last-hidden-state RBF probe | `choice`, `score`, `noul` |
-| `FINAL-Bench/ZTC-Judge-9B` | Transformers | candidate verifier plus last-hidden-state RBF probe | `choice`, `score`, `noul` |
-| `FINAL-Bench/ZTC-Judge-27B` | Transformers | candidate verifier plus last-hidden-state RBF probe | `choice`, `score`, `noul` |
-| `FINAL-Bench/Darwin-397B-ZTC` | Transformers | calibrated last-hidden-state linear probe | `noul` |
+Pass a value from the **Alias for `--model`** column to the server. These are
+names in the bundled registry, not Hugging Face repository IDs. For example,
+`--model bosun-v3.1-0.6b` selects `Hanno-Labs/bosun-v3.1-0.6b`. The alias is
+resolved and loaded at startup; an unknown or disabled alias fails before the
+server accepts requests. Without `--model`, requests can select an alias in
+their `model` field, and the default is `kev-4b`.
+
+The table lists every enabled bundled alias. A custom `DECISION_REGISTRY` file
+defines its own aliases. The backend column reflects the registry entry; model
+size and hardware requirements still apply.
+
+| Alias for `--model` | Model repository | Registry backend |
+| --- | --- | --- |
+| `bge-reranker-v2-m3` | `BAAI/bge-reranker-v2-m3` | Transformers |
+| `bosun-v3.1-0.6b` | `Hanno-Labs/bosun-v3.1-0.6b` | Transformers |
+| `bosun-v3.1-1.7b` | `Hanno-Labs/bosun-v3.1-1.7b` | Transformers |
+| `certo` | `altslate/certo-decision-model` | Transformers |
+| `darwin-397b-ztc` | `FINAL-Bench/Darwin-397B-ZTC` | Transformers |
+| `decider-2b` | `Mapika/decider-2b` | Transformers |
+| `decider-35b-a3b` | `Mapika/decider-35b-a3b` | Transformers |
+| `djev` | `google/diffusiongemma-26B-A4B-it` | Transformers |
+| `djev-thinking` | `nvidia/diffusiongemma-26B-A4B-it-NVFP4` | Transformers |
+| `gliner2-large-v1` | `fastino/gliner2-large-v1` | Transformers |
+| `gliner2.5-base` | `fastino/gliner2.5-base-v1` | Transformers |
+| `gliner2.5-multi-v1` | `fastino/gliner2.5-multi-v1` | Transformers |
+| `gliner2.5-small-v1` | `fastino/gliner2.5-small-v1` | Transformers |
+| `gte-reranker-modernbert-base` | `Alibaba-NLP/gte-reranker-modernbert-base` | Transformers |
+| `jeff` | `knowledgator/gliformer-large-v1` | Transformers |
+| `jev-local` | `Qwen/Qwen3.5-9B` | Transformers |
+| `jqv` | `Qwen/Qwen3-32B` | Transformers |
+| `kalm-jev-large` | `KaLM-Embedding/KaLM-Reranker-V1-Large-R2` | Transformers |
+| `kalm-jev-nano` | `KaLM-Embedding/KaLM-Reranker-V1-Nano-R2` | Transformers |
+| `kalm-jev-small` | `KaLM-Embedding/KaLM-Reranker-V1-Small-R2` | Transformers |
+| `kev-0.5b` | `jaredpalmer/kev-0.5b` | Transformers |
+| `kev-0.6b` | `jaredpalmer/kev-0.6b` | Transformers |
+| `kev-4b` | `jaredpalmer/kev-4b` | Transformers |
+| `kev-8b` | `jaredpalmer/kev-8b` | Transformers |
+| `laya` | `convaiinnovations/laya` | Transformers |
+| `litjev` | `Qwen/Qwen3.8-27B` | Transformers |
+| `mxbai-rerank-base-v2` | `mixedbread-ai/mxbai-rerank-base-v2` | Transformers |
+| `open-alternative-jev` | `IkerMoel/open-alternative-jev` | Transformers |
+| `open-jev-zefan-2b` | `ZefanCai/Open-Jev-2B` | Transformers |
+| `open-jev-zefan-9b` | `ZefanCai/Open-Jev-9B` | Transformers |
+| `opendecision` | `MoritzLaurer/ModernBERT-large-zeroshot-v2.0` | Transformers |
+| `openjev-thinking` | `nvidia/diffusiongemma-26B-A4B-it-NVFP4` | Transformers |
+| `openjev-verdict` | `heman10x/rlcd-modernbert-151m` | Transformers |
+| `qwen3-reranker-4b` | `Qwen/Qwen3-Reranker-4B` | Transformers |
+| `reflex-27b` | `Qwen/Qwen3.8-27B` | Transformers |
+| `reflex-4b` | `Qwen/Qwen3.5-4B` | Transformers |
+| `semif-openjev-qwen3.5-4b` | `TheoLeeCJ/SemIf` | Transformers |
+| `simplejev-qwen3.6-35b-a3b` | `Qwen/Qwen3.6-35B-A3B` | Transformers |
+| `simplejev-qwen3.8-27b` | `Qwen/Qwen3.8-27B` | Transformers |
+| `smalljev` | `isHeSatoshi/smalljev-semantic-v9` | Transformers |
+| `system-one-qwen3.5-4b-scorer` | `pngwn/system-one-qwen3.5-4b-scorer` | Transformers |
+| `winnow-12b` | `EldanRing/Winnow-12B` | llama |
+| `zerank-2` | `zeroentropy/zerank-2-reranker` | Transformers |
+| `ztc-judge-27b` | `FINAL-Bench/ZTC-Judge-27B` | Transformers |
+| `ztc-judge-4b` | `FINAL-Bench/ZTC-Judge-4B` | Transformers |
+| `ztc-judge-9b` | `FINAL-Bench/ZTC-Judge-9B` | Transformers |
+
+The bundled registry explicitly limits `darwin-397b-ztc` to `noul` and
+`smalljev` to `choice`. See the registry JSON for each entry's readout and
+question-type metadata.
 
 ## Catalogued models awaiting readouts
 
-| Model | Required integration | Status |
+| Disabled alias | Model repository | Required integration |
 | --- | --- | --- |
-| `C-Tianyu/NanoJev` | candidate-set attention head | pending |
-| `com-kotobalabs/open-jev-deberta-v3-large` | encoder option-scoring head | pending |
-| `aac6fef/laya-mlx` | MLX marker-scalar readout | pending |
-| `PatronusAI/Llama-3-Patronus-Lynx-8B-Instruct` | generative structured PASS/FAIL judge | pending |
-| `convaiinnovations/laya-multilingual` | option-marker set head | pending |
-| `vectara/hallucination_evaluation_model` | pairwise consistency classifier mapping | pending |
-| `Qwen/Qwen3-Next-80B-A3B-Instruct` | generative decision recipe | pending |
+| `nanojev` | `C-Tianyu/NanoJev` | candidate-set attention head |
+| `open-jev-deberta-v3-large` | `com-kotobalabs/open-jev-deberta-v3-large` | encoder option-scoring head |
+| `laya-mlx` | `aac6fef/laya-mlx` | MLX marker-scalar readout |
+| `patronus-lynx-8b-instruct` | `PatronusAI/Llama-3-Patronus-Lynx-8B-Instruct` | generative structured PASS/FAIL judge |
+| `laya-multilingual` | `convaiinnovations/laya-multilingual` | option-marker set head |
+| `vectara-hhem-2.1` | `vectara/hallucination_evaluation_model` | pairwise consistency classifier mapping |
+| `qwen3-next-80b-a3b-instruct` | `Qwen/Qwen3-Next-80B-A3B-Instruct` | generative decision recipe |
 
 Pending entries are not silently routed through an incompatible loader and do
 not count as supported models.
