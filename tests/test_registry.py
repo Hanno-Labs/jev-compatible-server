@@ -1,17 +1,68 @@
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+import uvicorn
 
+import jev_compatible_server.app as app_module
 from jev_compatible_server import registry as registry_module
 from jev_compatible_server.app import build_runtime
-from jev_compatible_server.protocol import DecisionRequest
+from jev_compatible_server.protocol import DecisionRequest, DecisionResponse, Usage
 from jev_compatible_server.registry import (
     ModelRegistry,
     RegistryRuntime,
     build_transformers_runtime,
 )
-from jev_compatible_server.runtime import RuntimeErrorBase
+from jev_compatible_server.runtime import DecisionRuntime, RuntimeErrorBase
+
+
+class FakeRuntime(DecisionRuntime):
+    model_name = "org/model-a"
+
+    def __init__(self) -> None:
+        self.requests: list[DecisionRequest] = []
+
+    def decide_batch(
+        self, requests: Sequence[DecisionRequest]
+    ) -> list[DecisionResponse]:
+        self.requests.extend(requests)
+        return [
+            DecisionResponse(model=self.model_name, answers={}, usage=Usage())
+            for _ in requests
+        ]
+
+
+def test_main_forwards_startup_model_pin(monkeypatch: pytest.MonkeyPatch) -> None:
+    selected: dict[str, object] = {}
+    fake_app = object()
+
+    def create_app(
+        *,
+        model: str | None = None,
+        model_batch_size: int | None = None,
+    ) -> object:
+        selected["model"] = model
+        selected["model_batch_size"] = model_batch_size
+        return fake_app
+
+    def run(app: object, *, host: str, port: int) -> None:
+        selected["app"] = app
+        selected["host"] = host
+        selected["port"] = port
+
+    monkeypatch.setattr(app_module, "create_app", create_app)
+    monkeypatch.setattr(uvicorn, "run", run)
+
+    app_module.main(["--model", "bosun-v3.1-0.6b", "--model-batch-size", "4"])
+
+    assert selected == {
+        "model": "bosun-v3.1-0.6b",
+        "model_batch_size": 4,
+        "app": fake_app,
+        "host": "0.0.0.0",
+        "port": 8000,
+    }
 
 
 def test_registry_resolves_default_and_overrides_config(tmp_path: Path) -> None:
@@ -41,6 +92,100 @@ def test_builtin_registry_resolves_public_default() -> None:
     name, entry = registry.resolve(None)
     assert name == "kev-4b"
     assert entry.model == "jaredpalmer/kev-4b"
+
+
+def test_registry_runtime_eagerly_loads_and_pins_selected_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = ModelRegistry.from_json(
+        json.dumps(
+            {
+                "default": "model-b",
+                "models": {
+                    "model-a": {
+                        "backend": "transformers",
+                        "model": "org/model-a",
+                    },
+                    "model-b": {
+                        "backend": "transformers",
+                        "model": "org/model-b",
+                    },
+                },
+            }
+        )
+    )
+    fake_runtime = FakeRuntime()
+    loaded_models: list[str] = []
+
+    def build_backend(
+        model_id: str,
+        config: dict[str, object],
+        *,
+        batch_size_override: int | None = None,
+    ) -> DecisionRuntime:
+        del config, batch_size_override
+        loaded_models.append(model_id)
+        return fake_runtime
+
+    monkeypatch.setattr(registry_module, "build_transformers_runtime", build_backend)
+
+    runtime = RegistryRuntime(registry, pinned_model="model-a")
+
+    assert runtime.model_name == "model-a"
+    assert runtime.pinned_model == "model-a"
+    assert loaded_models == ["org/model-a"]
+
+    request = DecisionRequest.model_validate(
+        {
+            "state": "state",
+            "questions": {"q": {"type": "noul", "instructions": "Decide."}},
+        }
+    )
+    response = runtime.decide_batch([request])
+
+    assert len(response) == 1
+    assert fake_runtime.requests == [request]
+    assert loaded_models == ["org/model-a"]
+
+
+def test_registry_runtime_rejects_request_for_different_pinned_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = ModelRegistry.from_json(
+        json.dumps(
+            {
+                "models": {
+                    "model-a": {
+                        "backend": "transformers",
+                        "model": "org/model-a",
+                    },
+                    "model-b": {
+                        "backend": "transformers",
+                        "model": "org/model-b",
+                    },
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(
+        registry_module,
+        "build_transformers_runtime",
+        lambda model_id, config, *, batch_size_override=None: FakeRuntime(),
+    )
+    runtime = RegistryRuntime(registry, pinned_model="model-a")
+    request = DecisionRequest.model_validate(
+        {
+            "model": "model-b",
+            "state": "state",
+            "questions": {"q": {"type": "noul", "instructions": "Decide."}},
+        }
+    )
+
+    with pytest.raises(
+        RuntimeErrorBase,
+        match="server is pinned to model 'model-a'; request selected 'model-b'",
+    ):
+        runtime.decide_batch([request])
 
 
 def test_registry_recipe_is_shared_and_model_config_wins() -> None:
@@ -359,6 +504,56 @@ def test_build_runtime_uses_builtin_registry_without_model_environment(
     assert isinstance(runtime, RegistryRuntime)
     assert runtime.registry.resolve(None)[0] == "kev-4b"
     assert runtime.model_batch_size is None
+
+
+def test_build_runtime_pins_bundled_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "DECISION_REGISTRY",
+        "DECISION_BACKEND",
+        "DECISION_MODEL_ID",
+        "DECISION_MODEL_PATH",
+        "DECISION_CONFIG",
+        "DECISION_MODEL_BATCH_SIZE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    fake_runtime = FakeRuntime()
+    loaded_models: list[str] = []
+
+    def build_backend(
+        model_id: str,
+        config: dict[str, object],
+        *,
+        batch_size_override: int | None = None,
+    ) -> DecisionRuntime:
+        del config, batch_size_override
+        loaded_models.append(model_id)
+        return fake_runtime
+
+    monkeypatch.setattr(registry_module, "build_transformers_runtime", build_backend)
+
+    runtime = build_runtime(model="bosun-v3.1-0.6b")
+
+    assert isinstance(runtime, RegistryRuntime)
+    assert runtime.model_name == "bosun-v3.1-0.6b"
+    assert runtime.pinned_model == "bosun-v3.1-0.6b"
+    assert loaded_models == ["Hanno-Labs/bosun-v3.1-0.6b"]
+
+
+def test_build_runtime_rejects_model_pin_with_direct_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DECISION_REGISTRY", raising=False)
+    monkeypatch.setenv("DECISION_BACKEND", "transformers")
+    monkeypatch.setenv("DECISION_MODEL_ID", "org/direct-model")
+    monkeypatch.delenv("DECISION_MODEL_PATH", raising=False)
+
+    with pytest.raises(
+        RuntimeErrorBase,
+        match="--model cannot be combined with DECISION_BACKEND",
+    ):
+        build_runtime(model="bosun-v3.1-0.6b")
 
 
 def test_build_runtime_accepts_model_batch_size_environment_override(

@@ -198,18 +198,26 @@ def build_transformers_runtime(
 
 
 class RegistryRuntime(DecisionRuntime):
-    """Lazy, cached runtime dispatch with per-model microbatching."""
+    """Cached registry dispatch, optionally pinned to one eagerly loaded model."""
 
     def __init__(
         self,
         registry: ModelRegistry,
         *,
+        pinned_model: str | None = None,
         model_batch_size: int | None = None,
-    ):
+    ) -> None:
         self.registry = registry
-        self.model_name = registry.definition.default or "registry"
         self.model_batch_size = model_batch_size
         self._runtimes: dict[str, DecisionRuntime] = {}
+        self.pinned_model: str | None = None
+        if pinned_model is None:
+            self.model_name = registry.definition.default or "registry"
+            return
+        name, entry = registry.resolve(pinned_model)
+        self.pinned_model = name
+        self.model_name = name
+        self._runtime(name, entry)
 
     def _runtime(self, name: str, entry: RegistryModel) -> DecisionRuntime:
         cached = self._runtimes.get(name)
@@ -245,7 +253,15 @@ class RegistryRuntime(DecisionRuntime):
         grouped: dict[str, list[tuple[int, DecisionRequest]]] = defaultdict(list)
         entries: dict[str, RegistryModel] = {}
         for index, request in enumerate(requests):
-            name, entry = self.registry.resolve(request.model)
+            requested_model = request.model
+            if self.pinned_model is not None:
+                if requested_model not in (None, self.pinned_model):
+                    raise RuntimeErrorBase(
+                        f"server is pinned to model {self.pinned_model!r}; "
+                        f"request selected {requested_model!r}"
+                    )
+                requested_model = self.pinned_model
+            name, entry = self.registry.resolve(requested_model)
             grouped[name].append((index, request))
             entries[name] = entry
 

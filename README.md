@@ -17,7 +17,8 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then star
 the server with the Transformers backend:
 
 ```bash
-uvx --from 'jev-compatible-server[transformers]' jev-compatible-server
+uvx --from 'jev-compatible-server[transformers]' \
+  jev-compatible-server --model bosun-v3.1-0.6b
 ```
 
 Send a decision request to `POST /v1/systemone`:
@@ -26,7 +27,6 @@ Send a decision request to `POST /v1/systemone`:
 curl http://localhost:8000/v1/systemone \
   --header 'content-type: application/json' \
   --data '{
-    "model": "kev-0.5b",
     "state": "A customer says they were charged twice.",
     "questions": {
       "route": {
@@ -41,8 +41,10 @@ curl http://localhost:8000/v1/systemone \
   }'
 ```
 
-The first request downloads the selected model and its backbone from Hugging
-Face. See the [API reference](docs/API.md) for all question and response types.
+`--model` pins one bundled registry entry, downloads it from Hugging Face when
+needed, and loads it before the server begins accepting requests. Requests may
+omit `model`; the server rejects a request that names a different model. See the
+[API reference](docs/API.md) for all question and response types.
 
 ## Installation
 
@@ -51,7 +53,8 @@ Select the extra for the inference backend you need:
 
 ```bash
 # Hugging Face Transformers models
-uvx --from 'jev-compatible-server[transformers]' jev-compatible-server
+uvx --from 'jev-compatible-server[transformers]' \
+  jev-compatible-server --model bosun-v3.1-0.6b
 
 # llama.cpp/GGUF models
 DECISION_BACKEND=llama \
@@ -59,7 +62,9 @@ DECISION_MODEL_PATH=/path/to/model.gguf \
 uvx --from 'jev-compatible-server[llama]' jev-compatible-server
 ```
 
-The bundled public-model registry is used by default. Custom GGUF models and
+Omit `--model` to run the bundled registry in multi-model mode. In that mode,
+each request may select a registry alias with its `model` field, and requests
+without one use the registry default (`kev-4b`). Custom GGUF models and
 registries require the environment described in the
 [model recipe guide](docs/MODEL_RECIPES.md).
 

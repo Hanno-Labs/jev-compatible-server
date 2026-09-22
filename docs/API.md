@@ -137,10 +137,13 @@ Darwin's own forthcoming answer rather than scoring an external candidate.
 ## Model selection
 
 The optional top-level `model` selects an enabled registry entry. When omitted,
-the registry's `default` entry is used. Unknown and disabled models return an
-HTTP `422` response.
+the registry's `default` entry is used. Start the server with `--model ALIAS` to
+load and pin one registry entry before serving; requests may then omit `model`
+or name that same alias. Requests naming another model return HTTP `422`.
+Unknown and disabled models also return HTTP `422`.
 
 ## Health
 
-`GET /health` returns the server status and active runtime name without loading
-every registered model.
+`GET /health` returns the server status and active runtime name. In registry
+mode it does not load every registered model; with `--model`, it reports the
+pinned alias after that model has loaded.
