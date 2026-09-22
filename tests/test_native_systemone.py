@@ -153,9 +153,53 @@ def test_djev_uses_its_distinct_request_shape_and_options() -> None:
     assert "isolation" not in captured
 
 
-def test_unshipped_djev_thinking_fails_before_inference() -> None:
-    with pytest.raises(RuntimeErrorBase, match="no thinking inference contract"):
-        DjevThinkingRuntime("google/diffusiongemma-26B-A4B-it").decide(_request())
+def test_djev_thinking_forwards_its_published_thought_budget() -> None:
+    captured: dict[str, Any] = {}
+
+    def post(_: str, body: dict[str, Any], __: float) -> dict[str, Any]:
+        captured.update(body)
+        return {
+            "answers": {
+                "route": {
+                    "type": "choice",
+                    "choice": "card",
+                    "probabilities": {"cash": 0.2, "card": 0.8},
+                    "confidence": 0.8,
+                },
+                "urgent": {"type": "noul", "noul": 0.3},
+                "severity": {
+                    "type": "score",
+                    "score": 0.8,
+                    "probabilities": {"0": 0.2, "1": 0.8},
+                    "confidence": 0.8,
+                    "legend": {"0": "low", "1": "high"},
+                },
+            }
+        }
+
+    runtime = DjevThinkingRuntime(
+        "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+        config={
+            "decision": {
+                "endpoint": "http://djev-thinking:8011/v1/systemone",
+                "request_fields": {"think": 64},
+            }
+        },
+        post_json=post,
+    )
+
+    response = runtime.decide(_request())
+
+    assert captured["think"] == 64
+    assert response.answers["route"].type == "choice"
+
+
+def test_djev_thinking_requires_its_published_thought_budget() -> None:
+    with pytest.raises(RuntimeErrorBase, match="requires"):
+        DjevThinkingRuntime(
+            "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+            config={"decision.endpoint": "http://djev-thinking:8011/v1/systemone"},
+        )
 
 
 def test_openjev_thinking_requires_its_published_think_budget() -> None:

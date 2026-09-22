@@ -664,25 +664,72 @@
       "backend": "transformers",
       "model": "google/diffusiongemma-26B-A4B-it",
       "description": "DJeV structured DiffusionGemma decision distribution",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "diffusion_structured_read"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "diffusion_structured_read",
+          "endpoint": "http://127.0.0.1:8000/v1/request",
+          "native_model": "djev",
+          "public_model_name": "djev",
+          "timeout_seconds": 120,
+          "weights": {
+            "repo": "google/diffusiongemma-26B-A4B-it",
+            "revision": "f7f5b7f5fa82ffc52addd066915886d497f5517b"
+          },
+          "options": {
+            "score_mode": "independent_levels"
+          }
+        }
+      }
     },
     "djev-thinking": {
       "backend": "transformers",
-      "model": "google/diffusiongemma-26B-A4B-it",
-      "description": "DJeV thinking variant with staged thought and distribution readout",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "diffusion_thinking_read"}
+      "model": "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+      "description": "DJeV Spark thinking variant with staged thought and native typed distribution readout",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "diffusion_thinking_read",
+          "native_contract": "djev",
+          "endpoint": "http://127.0.0.1:8011/v1/systemone",
+          "native_model": "djev-thinking",
+          "public_model_name": "djev-thinking",
+          "request_fields": {
+            "think": 64
+          },
+          "timeout_seconds": 120,
+          "weights": {
+            "repo": "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+            "revision": "ec4ff3df205028f4e81c954c2227f9312b3ec2ea"
+          },
+          "server": {
+            "repo": "https://github.com/mmastrac/djev-spark",
+            "revision": "1444f3e927f83ba508e5b28a4fd4fdd9ecd0976b"
+          }
+        }
+      }
     },
     "jeff": {
       "backend": "transformers",
       "model": "knowledgator/gliformer-large-v1",
       "description": "Jeff GLiFormer native system-one decision service",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "gliformer_native"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "gliformer_native",
+          "endpoint": "http://127.0.0.1:8000/v1/systemone",
+          "native_model": "gliformer-large-v1",
+          "public_model_name": "jeff",
+          "timeout_seconds": 120,
+          "weights": {
+            "repo": "knowledgator/gliformer-large-v1",
+            "revision": "d0a4e53d09cebe6bc963dd9be319d4279084bb2d"
+          }
+        }
+      }
     },
     "open-jev-zefan-2b": {
       "backend": "transformers",
@@ -812,11 +859,31 @@
     },
     "openjev-thinking": {
       "backend": "transformers",
-      "model": "google/diffusiongemma-26b-a4b-it",
+      "model": "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
       "description": "OpenJev thinking DiffusionGemma typed server",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "diffusion_thinking_read"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "diffusion_thinking_read",
+          "native_contract": "openjev",
+          "endpoint": "http://127.0.0.1:8080/v1/systemone",
+          "native_model": "openjev-latest",
+          "public_model_name": "openjev-thinking",
+          "request_fields": {
+            "think": 512
+          },
+          "timeout_seconds": 120,
+          "weights": {
+            "repo": "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+            "revision": "ec4ff3df205028f4e81c954c2227f9312b3ec2ea"
+          },
+          "server": {
+            "repo": "https://github.com/razorback16/openjev",
+            "revision": "e04794ab36e4f7e6040c2547baecdb2737ce2e79"
+          }
+        }
+      }
     },
     "openjev-verdict": {
       "backend": "transformers",
@@ -969,13 +1036,221 @@
         }
       }
     },
+    "semif-openjev-qwen3.5-4b": {
+      "backend": "transformers",
+      "model": "TheoLeeCJ/SemIf",
+      "description": "SemIf OpenJev native-chat evidence and option-letter logits",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "semif",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "implementation": {
+            "repo": "https://github.com/TheoLeeCJ/SemIf",
+            "revision": "1f2dea3e25379f9dfc98cb83c324f00ab5deda37"
+          },
+          "loader": {
+            "model": "Qwen/Qwen3.5-4B",
+            "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
+    "open-alternative-jev": {
+      "backend": "transformers",
+      "model": "IkerMoel/open-alternative-jev",
+      "description": "Open Alternative Jev native-chat one-token option logits",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "open_alternative",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "implementation": {
+            "repo": "https://github.com/ikermoel/open-alternative-jev",
+            "revision": "4a85df1831b537343c9e133b5150fa3a3b1ce98e"
+          },
+          "loader": {
+            "model": "Qwen/Qwen3.5-4B",
+            "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
+    "decider-2b": {
+      "backend": "transformers",
+      "model": "Mapika/decider-2b",
+      "description": "Mapika Decider 2B direct option-slot logits",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "decider",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "implementation": {
+            "repo": "https://github.com/Mapika/decider",
+            "revision": "7557fe058e0b31ffcf754b7c5bb31a452454ce89"
+          },
+          "loader": {
+            "model": "Mapika/decider-2b",
+            "revision": "fa996cea58e1c1d8d1ab4d7124154f303b017f95",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
+    "decider-35b-a3b": {
+      "backend": "transformers",
+      "model": "Mapika/decider-35b-a3b",
+      "description": "Mapika Decider 35B-A3B direct option-slot logits",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "decider",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "implementation": {
+            "repo": "https://github.com/Mapika/decider",
+            "revision": "7557fe058e0b31ffcf754b7c5bb31a452454ce89"
+          },
+          "loader": {
+            "model": "Mapika/decider-35b-a3b",
+            "revision": "d9783c58ad4fbff3a6030c8332d29738ec49d22a",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
     "winnow-12b": {
       "backend": "llama",
-      "model": "EldanRing/Winnow-12B-Q8_0.gguf",
+      "model": "EldanRing/Winnow-12B",
       "description": "Winnow shared-branch llama.cpp decision server",
-      "support_status": "pending",
-      "enabled": false,
-      "config": {"decision.readout": "winnow_shared_branch"}
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "winnow_shared_branch",
+          "endpoint": "http://127.0.0.1:8091/v1/systemone",
+          "native_model": "Winnow-12B",
+          "public_model_name": "winnow-12b",
+          "timeout_seconds": 120,
+          "weights": {
+            "repo": "EldanRing/Winnow-12B",
+            "revision": "b6ac22b0d51b69b18200acacb3fbdd98073fffe8",
+            "file": "gguf/Winnow-12B-Q8_0.gguf"
+          },
+          "server": {
+            "repo": "https://github.com/EldanRing/winnow-inference",
+            "revision": "47ad31a338ebe2209e546b999c31f94853ddb75d"
+          }
+        }
+      }
+    },
+    "gliner2.5-base": {
+      "backend": "transformers",
+      "model": "fastino/gliner2.5-base-v1",
+      "description": "Fastino GLiNER 2.5 Base native constrained classifier",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "gliner2_multilabel",
+          "gliner2_load_options": {
+            "revision": "1a8bc24e00dc7300b9017c81d63e3dcdabb26596"
+          }
+        }
+      }
+    },
+    "gliner2-large-v1": {
+      "backend": "transformers",
+      "model": "fastino/gliner2-large-v1",
+      "description": "Fastino GLiNER 2 Large native constrained classifier",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "gliner2_multilabel",
+          "gliner2_load_options": {
+            "revision": "f32ea6ef6e26d8264fdc72431b4b3b041eadc537"
+          }
+        }
+      }
+    },
+    "gliner2.5-multi-v1": {
+      "backend": "transformers",
+      "model": "fastino/gliner2.5-multi-v1",
+      "description": "Fastino GLiNER 2.5 Multi native constrained classifier",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "gliner2_multilabel",
+          "gliner2_load_options": {
+            "revision": "a221b77a8baf4a613b8f8652661d41fa10a5641e"
+          }
+        }
+      }
+    },
+    "gliner2.5-small-v1": {
+      "backend": "transformers",
+      "model": "fastino/gliner2.5-small-v1",
+      "description": "Fastino GLiNER 2.5 Small native constrained classifier",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "gliner2_multilabel",
+          "gliner2_load_options": {
+            "revision": "7e6f537f10337497069276892a5ef435028252ce"
+          }
+        }
+      }
+    },
+    "jev-local": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.5-9B",
+      "description": "jev-local teacher-forced mean option log-probability scorer",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "jev_local_options",
+          "question_types": ["choice", "score", "noul"],
+          "implementation": {
+            "repo": "https://github.com/us/jev-local",
+            "revision": "56bfc2a96543f2fc6a4d4227460a2c17553c6e24"
+          },
+          "loader": {
+            "model": "Qwen/Qwen3.5-9B",
+            "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+          },
+          "temperatures": {
+            "choice": 0.5,
+            "noul": 0.25,
+            "score": 0.25
+          },
+          "chat": false
+        }
+      }
     }
   }
 }

@@ -93,6 +93,52 @@ def test_generic_profile_uses_configured_template_and_token_strings() -> None:
     assert "A. one" in compiled.prompt
 
 
+def test_semif_and_open_alternative_use_native_no_thinking_turns() -> None:
+    class Tokenizer:
+        def apply_chat_template(
+            self, messages: list[dict[str, str]], **kwargs: object
+        ) -> str:
+            assert kwargs["enable_thinking"] is False
+            return "CHAT\n" + messages[-1]["content"]
+
+    rendered: dict[str, str] = {}
+    for profile in ("semif", "open_alternative"):
+        value = backend(profile)
+        value._tokenizer = Tokenizer()
+        compiled = value._compile(request(), "pick", request().questions["pick"])
+        rendered[profile] = compiled.prompt
+        assert compiled.prompt.startswith("CHAT\n")
+        assert compiled.suffixes == {"A": "A", "B": "B"}
+    assert '"evidence": {"x": 1}' in rendered["semif"]
+    assert "Context:" in rendered["open_alternative"]
+
+
+def test_decider_and_system_one_open_preserve_answer_slot_contracts() -> None:
+    decider = backend("decider")
+    compiled = decider._compile(request(), "pick", request().questions["pick"])
+    assert compiled.prompt.endswith("Answer: (")
+    assert "(A) odd/key: one" in compiled.prompt
+    assert compiled.add_special_tokens is False
+
+    decider_truth = decider._compile(request(), "truth", request().questions["truth"])
+    assert decider_truth.labels == {"A": "false", "B": "true"}
+    assert "(A) no" in decider_truth.prompt
+    assert "(B) yes" in decider_truth.prompt
+
+    system_one = backend("system_one_open")
+    truth = system_one._compile(request(), "truth", request().questions["truth"])
+    assert truth.labels == {"A": "false", "B": "true"}
+    assert "Question (yes/no): true?" in truth.prompt
+    assert truth.prompt.endswith("Answer: (")
+    assert truth.add_special_tokens is True
+
+
+def test_system_one_open_rejects_unpacked_multi_question_requests() -> None:
+    value = backend("system_one_open")
+    with pytest.raises(RuntimeErrorBase, match="packed multi-question"):
+        value.decide(request())
+
+
 def test_simplejev_noul_and_boundary_validation() -> None:
     value = backend("simplejev_v1")
     value._temperature = lambda: 1.0  # type: ignore[method-assign]
