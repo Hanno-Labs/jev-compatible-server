@@ -1169,7 +1169,7 @@
       "backend": "transformers",
       "model": "llm-semantic-router/Decision-1.0-Eos-0.8B",
       "description": "Decision 1.0 Eos native typed decision head",
-      "support_status": "pending",
+      "support_status": "supported",
       "enabled": true,
       "config": {
         "decision": {
