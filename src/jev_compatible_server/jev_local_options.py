@@ -30,6 +30,7 @@ from .runtime import DecisionRuntime, RuntimeErrorBase, softmax
 UPSTREAM_SOURCE_REVISION = "56bfc2a96543f2fc6a4d4227460a2c17553c6e24"
 DEFAULT_MODEL = "Qwen/Qwen3.5-9B"
 DEFAULT_MODEL_REVISION = "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+CANDIDATE_BATCH_SIZE = 8
 
 # The plain-prompt values are the upstream shipped defaults for Qwen3.5-9B.
 DEFAULT_TEMPERATURES: dict[str, float] = {
@@ -238,39 +239,56 @@ class JevLocalOptionsBackend(DecisionRuntime):
             raise RuntimeErrorBase(
                 f"jev-local prefix too long: {len(prefix_ids)} tokens"
             )
+        encoded_candidates: list[tuple[list[int], int]] = []
+        for candidate in candidates:
+            encoded = self._tokenizer(prefix + " " + candidate, return_tensors="pt")
+            full_ids = encoded.input_ids[0].tolist()
+            if len(full_ids) > 4096:
+                raise RuntimeErrorBase(
+                    f"jev-local input too long: {len(full_ids)} tokens"
+                )
+            common = 0
+            while (
+                common < len(prefix_ids)
+                and common < len(full_ids)
+                and prefix_ids[common] == full_ids[common]
+            ):
+                common += 1
+            if common == 0:
+                raise RuntimeErrorBase("jev-local candidate shares no token prefix")
+            if common == len(full_ids):
+                raise RuntimeErrorBase(
+                    f"jev-local candidate {candidate!r} scores zero tokens"
+                )
+            encoded_candidates.append((full_ids, common))
+
         means: list[float] = []
         with self._torch.no_grad():
-            for candidate in candidates:
-                encoded = self._tokenizer(
-                    prefix + " " + candidate, return_tensors="pt"
+            for start in range(0, len(encoded_candidates), CANDIDATE_BATCH_SIZE):
+                chunk = encoded_candidates[start : start + CANDIDATE_BATCH_SIZE]
+                max_length = max(len(full_ids) for full_ids, _ in chunk)
+                tokens = self._torch.zeros(
+                    (len(chunk), max_length), dtype=self._torch.long
                 )
-                full_ids = encoded.input_ids[0].tolist()
-                if len(full_ids) > 4096:
-                    raise RuntimeErrorBase(
-                        f"jev-local input too long: {len(full_ids)} tokens"
-                    )
-                common = 0
-                while (
-                    common < len(prefix_ids)
-                    and common < len(full_ids)
-                    and prefix_ids[common] == full_ids[common]
-                ):
-                    common += 1
-                if common == 0:
-                    raise RuntimeErrorBase("jev-local candidate shares no token prefix")
-                if common == len(full_ids):
-                    raise RuntimeErrorBase(
-                        f"jev-local candidate {candidate!r} scores zero tokens"
-                    )
-                tokens = encoded.input_ids.to(self._model.device)
-                attention = encoded.attention_mask.to(self._model.device)
+                attention = self._torch.zeros_like(tokens)
+                for row, (full_ids, _) in enumerate(chunk):
+                    tokens[row, : len(full_ids)] = self._torch.tensor(full_ids)
+                    attention[row, : len(full_ids)] = 1
+                tokens = tokens.to(self._model.device)
+                attention = attention.to(self._model.device)
                 output = self._model(tokens, attention_mask=attention)
-                log_probabilities = self._torch.log_softmax(output.logits[0], dim=-1)
-                terms = [
-                    log_probabilities[index - 1, tokens[0, index]].item()
-                    for index in range(common, len(full_ids))
-                ]
-                means.append(sum(terms) / len(terms))
+                for row, (full_ids, common) in enumerate(chunk):
+                    candidate_logits = output.logits[
+                        row, common - 1 : len(full_ids) - 1, :
+                    ]
+                    log_probabilities = self._torch.log_softmax(
+                        candidate_logits, dim=-1
+                    )
+                    scored_tokens = tokens[row, common : len(full_ids)]
+                    terms = log_probabilities.gather(
+                        dim=-1, index=scored_tokens.unsqueeze(-1)
+                    ).squeeze(-1).tolist()
+                    means.append(sum(terms) / len(terms))
         return means
 
     def _score_question(

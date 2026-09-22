@@ -1,9 +1,13 @@
+from types import SimpleNamespace
+
 import pytest
 
 from jev_compatible_server.jev_local_options import (
+    CANDIDATE_BATCH_SIZE,
     DEFAULT_MODEL,
     DEFAULT_MODEL_REVISION,
     UPSTREAM_SOURCE_REVISION,
+    JevLocalOptionsBackend,
     answer_from_mean_logprobabilities,
     render_prefix,
 )
@@ -103,3 +107,51 @@ def test_choice_score_and_noul_keep_native_distributions() -> None:
     )
     assert isinstance(noul, NoulAnswer)
     assert noul.noul == pytest.approx(0.9820137900379085)
+
+
+def test_candidate_microbatch_matches_serial_teacher_forcing() -> None:
+    torch = pytest.importorskip("torch")
+
+    class ToyTokenizer:
+        def __call__(self, text: str, *, return_tensors: str) -> SimpleNamespace:
+            assert return_tensors == "pt"
+            tokens = torch.tensor([[ord(char) % 128 for char in text]])
+            return SimpleNamespace(input_ids=tokens, attention_mask=torch.ones_like(tokens))
+
+    class ToyModel:
+        device = torch.device("cpu")
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def __call__(self, tokens: object, *, attention_mask: object) -> SimpleNamespace:
+            self.calls += 1
+            assert (tokens[attention_mask == 0] == 0).all()
+            logits = torch.arange(128, dtype=torch.float32).expand(
+                tokens.shape[0], tokens.shape[1], -1
+            )
+            return SimpleNamespace(logits=logits)
+
+    backend = object.__new__(JevLocalOptionsBackend)
+    backend._torch = torch
+    backend._tokenizer = ToyTokenizer()
+    backend._model = ToyModel()
+    prefix = "Question:"
+    candidates = ["A" * (index % 5 + 1) for index in range(17)]
+    actual = backend._candidate_means(prefix, candidates)
+    assert backend._model.calls == 3
+    assert CANDIDATE_BATCH_SIZE == 8
+
+    expected = []
+    for candidate in candidates:
+        encoded = backend._tokenizer(prefix + " " + candidate, return_tensors="pt")
+        full_ids = encoded.input_ids[0].tolist()
+        common = len(prefix)
+        output = backend._model(encoded.input_ids, attention_mask=encoded.attention_mask)
+        log_probabilities = torch.log_softmax(output.logits[0], dim=-1)
+        terms = [
+            log_probabilities[index - 1, encoded.input_ids[0, index]].item()
+            for index in range(common, len(full_ids))
+        ]
+        expected.append(sum(terms) / len(terms))
+    assert actual == pytest.approx(expected)
