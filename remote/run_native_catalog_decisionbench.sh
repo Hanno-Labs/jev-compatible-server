@@ -273,7 +273,15 @@ run_suite() {
   stop_process "$chunk_pid"
   chunk_pid=
   bash "$chunk_helper" publish "$remote_result_dir" "$result_dir"
-  summary_is_complete "$result_dir/summary.json"
+  if ! summary_is_complete "$result_dir/summary.json"; then
+    echo "NATIVE_CATALOG_INCOMPLETE model=$MODEL_KEY" >&2
+    jq -c '{requested_rows,successful_rows,error_rows,unsupported_rows}' "$result_dir/summary.json" >&2
+    if [[ -f /workflow/compat.log ]]; then
+      sed -n -E 's/^.*(decision inference failed exception_type=[A-Za-z0-9_]+ frames=[^[:cntrl:]]+).*$/\1/p' /workflow/compat.log |
+        sort | uniq -c | sort -rn | head -n 20 >&2 || true
+    fi
+    return 1
+  fi
   active_result_dir=
   active_remote_dir=
   echo "NATIVE_CATALOG_COMPLETE model=$MODEL_KEY rows=23900" >&2
