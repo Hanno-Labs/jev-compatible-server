@@ -20,6 +20,8 @@ from .protocol import (
     ChoiceQuestion,
     DecisionRequest,
     DecisionResponse,
+    NoulAnswer,
+    NoulCriteria,
     NoulQuestion,
     ScoreQuestion,
 )
@@ -406,3 +408,121 @@ class JeffHTTPRuntime(NativeSystemOneHTTPRuntime):
 
 class WinnowHTTPRuntime(NativeSystemOneHTTPRuntime):
     """Winnow's llama.cpp server, retaining its shared-prefix branch planner."""
+
+    def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
+        return [self._decide_one(request) for request in requests]
+
+    def _decide_one(self, request: DecisionRequest) -> DecisionResponse:
+        if len(request.questions) != 1:
+            return super().decide_batch([request])[0]
+        name, question = next(iter(request.questions.items()))
+        if not isinstance(question, ChoiceQuestion):
+            return super().decide_batch([request])[0]
+
+        if len(question.criteria) <= 64:
+            try:
+                return super().decide_batch([request])[0]
+            except RuntimeErrorBase as exc:
+                if "Questions require 2" not in str(exc):
+                    raise
+                return self._noul_choice(request, name, question)
+
+        try:
+            return self._grouped_choice(request, name, question)
+        except RuntimeErrorBase as exc:
+            if "Questions require 2" not in str(exc):
+                raise
+            return self._noul_choice(request, name, question)
+
+    def _grouped_choice(
+        self, request: DecisionRequest, name: str, question: ChoiceQuestion
+    ) -> DecisionResponse:
+        keys = list(question.criteria)
+        anchor = keys[0]
+        # This adapter approximation compares overlapping native subset odds;
+        # it is not Winnow's single-call probability for all candidates.
+        log_weights = {anchor: 0.0}
+        input_tokens = 0
+        output_tokens = 0
+        for offset in range(1, len(keys), 63):
+            chunk_keys = [anchor, *keys[offset : offset + 63]]
+            chunk_question = question.model_copy(
+                update={"criteria": {key: question.criteria[key] for key in chunk_keys}}
+            )
+            chunk_request = request.model_copy(update={"questions": {name: chunk_question}})
+            reply = super().decide_batch([chunk_request])[0]
+            answer = reply.answers[name]
+            if not isinstance(answer, ChoiceAnswer):
+                raise RuntimeErrorBase("Winnow returned a non-choice chunk answer")
+            input_tokens += reply.usage.input_tokens
+            output_tokens += reply.usage.output_tokens
+            anchor_probability = max(answer.probabilities[anchor], 1e-12)
+            for key in chunk_keys[1:]:
+                log_weights[key] = math.log(max(answer.probabilities[key], 1e-12)) - math.log(
+                    anchor_probability
+                )
+        shift = max(log_weights.values())
+        weights = {key: math.exp(log_weights[key] - shift) for key in keys}
+        return self._choice_response(name, weights, input_tokens, output_tokens)
+
+    def _noul_choice(
+        self, request: DecisionRequest, name: str, question: ChoiceQuestion
+    ) -> DecisionResponse:
+        instruction = (
+            question.instructions
+            if isinstance(question.instructions, str)
+            else json.dumps(question.instructions, ensure_ascii=False)
+        )
+        weights: dict[str, float] = {}
+        input_tokens = 0
+        output_tokens = 0
+        candidates = list(question.criteria.items())
+        # Native Noul reads are independent, so their normalized probabilities
+        # are a fallback estimate rather than Winnow's native Choice readout.
+        for start in range(0, len(candidates), 16):
+            chunk = candidates[start : start + 16]
+            chunk_questions: dict[str, NoulQuestion] = {}
+            for index, (key, description) in enumerate(chunk, start):
+                candidate = (
+                    key
+                    if description is None
+                    else description
+                    if isinstance(description, str)
+                    else json.dumps(description, ensure_ascii=False)
+                )
+                chunk_questions[f"candidate_{index}"] = NoulQuestion(
+                    type="noul",
+                    instructions=f"{instruction}\nIs {key} the best option?",
+                    criteria=NoulCriteria(true=candidate, false="Another option is better"),
+                )
+            binary_request = request.model_copy(update={"questions": chunk_questions})
+            reply = super().decide_batch([binary_request])[0]
+            for index, (key, _) in enumerate(chunk, start):
+                answer = reply.answers[f"candidate_{index}"]
+                if not isinstance(answer, NoulAnswer):
+                    raise RuntimeErrorBase("Winnow returned a non-binary candidate answer")
+                weights[key] = max(answer.noul, 1e-12)
+            input_tokens += reply.usage.input_tokens
+            output_tokens += reply.usage.output_tokens
+        return self._choice_response(name, weights, input_tokens, output_tokens)
+
+    def _choice_response(
+        self, name: str, weights: Mapping[str, float], input_tokens: int, output_tokens: int
+    ) -> DecisionResponse:
+        total = sum(weights.values())
+        probabilities = {key: value / total for key, value in weights.items()}
+        winner = max(probabilities, key=probabilities.__getitem__)
+        return DecisionResponse.model_validate(
+            {
+                "model": self.model_name,
+                "answers": {
+                    name: {
+                        "type": "choice",
+                        "choice": winner,
+                        "probabilities": probabilities,
+                        "confidence": probabilities[winner],
+                    }
+                },
+                "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+            }
+        )

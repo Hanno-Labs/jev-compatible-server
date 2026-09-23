@@ -207,10 +207,12 @@ run_probe() {
     return 1
   fi
   jq -e '.answers.on.type == "noul" and (.answers.on.noul | type == "number")' /workflow/probe-response.json >/dev/null
-  if [[ "$MODEL_KEY" == openjev-thinking || "$MODEL_KEY" == openjev-razorback16 || "$MODEL_KEY" == djev-thinking ]]; then
+  if [[ "$MODEL_KEY" == openjev-thinking || "$MODEL_KEY" == openjev-razorback16 || "$MODEL_KEY" == djev-thinking || "$MODEL_KEY" == winnow-12b ]]; then
     local wide_count=255
     if [[ "$MODEL_KEY" == djev-thinking ]]; then
       wide_count=27
+    elif [[ "$MODEL_KEY" == winnow-12b ]]; then
+      wide_count=65
     fi
     local wide_status
     wide_status="$(jq -nc --arg model "$MODEL_KEY" --argjson count "$wide_count" '{model:$model,state:"Choose the final option.",questions:{many:{type:"choice",instructions:"Choose one.",criteria:(reduce range(0;$count) as $i ({}; .["c"+($i|tostring)]="Option "+($i|tostring)))}}}' |

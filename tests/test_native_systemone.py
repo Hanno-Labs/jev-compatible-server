@@ -9,6 +9,7 @@ from jev_compatible_server.native_systemone import (
     NativeSystemOneHTTPRuntime,
     OpenJevThinkingHTTPRuntime,
     SystemOneOpenHTTPRuntime,
+    WinnowHTTPRuntime,
 )
 from jev_compatible_server.protocol import DecisionRequest
 from jev_compatible_server.runtime import RuntimeErrorBase
@@ -192,6 +193,100 @@ def test_djev_uses_its_distinct_request_shape_and_options() -> None:
     assert captured["options"]["score_mode"] == "independent_levels"
     assert "isolation" not in captured
     assert "criteria" not in captured["questions"]["urgent"]
+
+
+def test_winnow_recombines_wide_choices_with_native_subsets() -> None:
+    calls: list[list[str]] = []
+
+    def post(_: str, body: dict[str, Any], __: float) -> dict[str, Any]:
+        keys = list(body["questions"]["pick"]["criteria"])
+        calls.append(keys)
+        assert len(keys) <= 64
+        values = {key: int(key[1:]) + 1 for key in keys}
+        total = sum(values.values())
+        probabilities = {key: value / total for key, value in values.items()}
+        winner = max(keys, key=probabilities.__getitem__)
+        return {
+            "answers": {
+                "pick": {
+                    "type": "choice",
+                    "choice": winner,
+                    "probabilities": probabilities,
+                    "confidence": probabilities[winner],
+                }
+            }
+        }
+
+    request = DecisionRequest.model_validate(
+        {
+            "state": "frozen",
+            "questions": {
+                "pick": {
+                    "type": "choice",
+                    "instructions": "Choose one.",
+                    "criteria": {f"c{i}": f"Option {i}" for i in range(70)},
+                }
+            },
+        }
+    )
+    runtime = WinnowHTTPRuntime(
+        "winnow",
+        config={"decision": {"endpoint": "http://winnow:8091/v1/systemone"}},
+        post_json=post,
+    )
+
+    response = runtime.decide(request)
+
+    assert [len(keys) for keys in calls] == [64, 7]
+    assert all(keys[0] == "c0" for keys in calls)
+    assert response.answers["pick"].choice == "c69"
+    assert response.answers["pick"].probabilities["c69"] == pytest.approx(70 / sum(range(1, 71)))
+
+
+def test_winnow_uses_binary_fallback_for_native_choice_limit() -> None:
+    calls: list[str] = []
+
+    def post(_: str, body: dict[str, Any], __: float) -> dict[str, Any]:
+        questions = body["questions"]
+        if "pick" in questions:
+            calls.append("choice")
+            raise RuntimeErrorBase("native HTTP 400: Questions require 2–64 alternatives")
+        calls.append("noul-batch")
+        assert len(questions) == 2
+        return {
+            "answers": {
+                key: {
+                    "type": "noul",
+                    "noul": 0.8 if question["criteria"]["true"] == "B" else 0.2,
+                }
+                for key, question in questions.items()
+            }
+        }
+
+    request = DecisionRequest.model_validate(
+        {
+            "state": "frozen",
+            "questions": {
+                "pick": {
+                    "type": "choice",
+                    "instructions": "Choose one.",
+                    "criteria": {"a": "A", "b": "B"},
+                }
+            },
+        }
+    )
+    runtime = WinnowHTTPRuntime(
+        "winnow",
+        config={"decision": {"endpoint": "http://winnow:8091/v1/systemone"}},
+        post_json=post,
+    )
+
+    response = runtime.decide(request)
+
+    assert calls == ["choice", "noul-batch"]
+    assert response.answers["pick"].choice == "b"
+    assert response.answers["pick"].probabilities == pytest.approx({"a": 0.2, "b": 0.8})
+    assert list(request.questions["pick"].criteria) == ["a", "b"]
 
 
 def test_djev_clamps_only_model_facing_criterion_descriptions() -> None:
