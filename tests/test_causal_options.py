@@ -139,6 +139,80 @@ def test_system_one_open_rejects_unpacked_multi_question_requests() -> None:
         value.decide(request())
 
 
+def test_system_one_sg_preserves_choice_index_prompt_and_yes_first_order() -> None:
+    class Tokenizer:
+        def apply_chat_template(
+            self, messages: list[dict[str, str]], **kwargs: object
+        ) -> str:
+            assert kwargs["enable_thinking"] is False
+            assert kwargs["add_generation_prompt"] is True
+            return messages[-1]["content"]
+
+    value = backend("system_one_sg")
+    value._tokenizer = Tokenizer()
+    choice = value._compile(request(), "pick", request().questions["pick"])
+    assert choice.labels == {"0": "odd/key", "1": "even:key"}
+    assert choice.suffixes == {"0": "0", "1": "1"}
+    assert '"name": "odd/key", "criteria": "one"' in choice.prompt
+    assert choice.prompt.endswith("choice_index:")
+    score = value._compile(request(), "score", request().questions["score"])
+    assert score.labels == {"0": "0", "1": "1"}
+    truth = value._compile(request(), "truth", request().questions["truth"])
+    assert truth.labels == {"0": "true", "1": "false"}
+    assert '"name": "yes", "criteria": "Yes"' in truth.prompt
+    assert '"name": "no", "criteria": "No"' in truth.prompt
+
+    answer = value._answer(request().questions["pick"], {"odd/key": .75, "even:key": .25})
+    assert answer.confidence == pytest.approx(.18872187554086717)
+
+
+def test_system_one_sg_scores_multitoken_decimal_indices() -> None:
+    torch = pytest.importorskip("torch")
+
+    class Tokenizer:
+        def encode(self, text: str, **kwargs: object) -> list[int]:
+            del kwargs
+            assert text.startswith("p")
+            return [99] + [int(digit) for digit in text[1:]]
+
+    class Model(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.anchor = torch.nn.Parameter(torch.zeros(()))
+
+        def forward(self, input_ids: object, attention_mask: object, **kwargs: object) -> object:
+            del attention_mask
+            assert kwargs == {"logits_to_keep": 1, "use_cache": False}
+            logits = torch.zeros((*input_ids.shape, 100))
+            logits[:, -1, 1] = 2.0
+            logits[:, -1, 0] = 1.0
+            if input_ids.shape[1] > 1:
+                logits[:, -1, 0] = 3.0
+                logits[:, -1, 1] = 4.0
+            return type("Output", (), {"logits": logits})()
+
+    value = backend("system_one_sg")
+    value._torch = torch
+    value._tokenizer = Tokenizer()
+    value._model = Model()
+    compiled = OptionPrompt(
+        "p", {str(i): str(i) for i in range(12)},
+        {str(i): str(i) for i in range(12)},
+    )
+    scores = value._score(compiled)
+    root_logits = torch.zeros(100)
+    root_logits[0], root_logits[1] = 1.0, 2.0
+    child_logits = torch.zeros(100)
+    child_logits[0], child_logits[1] = 3.0, 4.0
+    root = torch.log_softmax(root_logits, dim=-1)
+    child = torch.log_softmax(child_logits, dim=-1)
+    assert scores["1"] == pytest.approx(float(root[1]))
+    assert scores["10"] == pytest.approx(float(root[1] + child[0]))
+    assert scores["11"] == pytest.approx(float(root[1] + child[1]))
+    value.metadata = {"profile": "litjev", "sequence_option_extension": True}
+    assert value._score(compiled) == scores
+
+
 def test_simplejev_noul_and_boundary_validation() -> None:
     value = backend("simplejev_v1")
     value._temperature = lambda: 1.0  # type: ignore[method-assign]

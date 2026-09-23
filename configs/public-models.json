@@ -395,6 +395,48 @@
       "support_status": "pending",
       "enabled": false
     },
+    "system-one-open": {
+      "backend": "transformers",
+      "model": "mithalouni/system-one-open",
+      "description": "System One Open public typed decision endpoint; tuned checkpoint is not published",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "system_one_open_http",
+          "endpoint": "https://mithalouni--jev-serve-e2b-full-server-web.modal.run/decide",
+          "native_model": "e2b-full",
+          "public_model_name": "system-one-open",
+          "timeout_seconds": 120,
+          "server": {
+            "repo": "https://github.com/mithalouni/system-one-open",
+            "revision": "77f1f7cccf8aa752e0ed7edcc8d2094bac707bdc"
+          }
+        }
+      }
+    },
+    "system-one-sg": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3-8B",
+      "description": "Sean Goedecke System One choice-index readout; conditional decimal-sequence extension above 10 options",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "system_one_sg",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "loader": {
+            "model": "Qwen/Qwen3-8B",
+            "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
     "system-one-qwen3.5-4b-scorer": {
       "backend": "transformers",
       "model": "pngwn/system-one-qwen3.5-4b-scorer",
@@ -593,9 +635,19 @@
     "certo": {
       "backend": "transformers",
       "model": "altslate/certo-decision-model",
-      "recipe": "sequence-classifier-native-scalar-v1",
-      "description": "Certo decision classifier exposed as candidate scoring",
-      "support_status": "supported"
+      "description": "Certo custom ModernBERT option-query decision head",
+      "support_status": "supported",
+      "config": {
+        "decision": {
+          "readout": "certo_decision",
+          "revision": "7628c0da918c5fce96a6629c548630ac6bed8c58",
+          "backbone_revision": "45bb4654a4d5aaff24dd11d4781fa46d39bf8c13",
+          "question_types": ["choice", "score", "noul"],
+          "max_state_len": 256,
+          "max_option_len": 64,
+          "option_batch_size": 16
+        }
+      }
     },
     "mxbai-rerank-base-v2": {
       "backend": "transformers",
@@ -628,6 +680,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "jqv",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 3.0225814579771493,
           "loader": {
@@ -650,6 +703,30 @@
         "decision": {
           "readout": "causal_options",
           "profile": "litjev",
+          "sequence_option_extension": true,
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "loader": {
+            "model": "Qwen/Qwen3.8-27B",
+            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
+    "qwen3.8-27b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.8-27B",
+      "description": "Raw Qwen3.8-27B no-thinking option-letter baseline using a LitJev-style prompt and conditional sequence readout; no checkpoint adapter",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "litjev",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "loader": {
@@ -680,7 +757,8 @@
             "revision": "f7f5b7f5fa82ffc52addd066915886d497f5517b"
           },
           "options": {
-            "score_mode": "independent_levels"
+            "score_mode": "independent_levels",
+            "isolation": "independent"
           }
         }
       }
@@ -760,6 +838,7 @@
           "input": {
             "template": "{query}\n{instructions}\n{candidate}",
             "max_length": 4096,
+            "truncate_overlong": true,
             "chat_template": {
               "add_generation_prompt": true,
               "enable_thinking": false
@@ -810,6 +889,7 @@
           "input": {
             "template": "{query}\n{instructions}\n{candidate}",
             "max_length": 4096,
+            "truncate_overlong": true,
             "chat_template": {
               "add_generation_prompt": true,
               "enable_thinking": false
@@ -882,7 +962,56 @@
           },
           "server": {
             "repo": "https://github.com/razorback16/openjev",
-            "revision": "e04794ab36e4f7e6040c2547baecdb2737ce2e79"
+            "revision": "297a4efa843cca82b1e9989a3f50b5f1bdc49752"
+          }
+        }
+      }
+    },
+    "openjev-razorback16": {
+      "backend": "transformers",
+      "model": "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+      "description": "Razorback OpenJev native typed decision server without the thinking extension",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "native_systemone",
+          "endpoint": "http://127.0.0.1:8080/v1/systemone",
+          "native_model": "openjev-latest",
+          "public_model_name": "openjev-razorback16",
+          "timeout_seconds": 120,
+          "weights": {
+            "repo": "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+            "revision": "ec4ff3df205028f4e81c954c2227f9312b3ec2ea"
+          },
+          "server": {
+            "repo": "https://github.com/razorback16/openjev",
+            "revision": "297a4efa843cca82b1e9989a3f50b5f1bdc49752"
+          }
+        }
+      }
+    },
+    "openjev-sglang": {
+      "backend": "transformers",
+      "model": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "description": "OpenJev SGLang prefill-only native typed decision server",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "native_systemone",
+          "endpoint": "http://127.0.0.1:8080/v1/systemone",
+          "native_model": "Qwen/Qwen3.6-35B-A3B",
+          "public_model_name": "openjev-sglang",
+          "timeout_seconds": 120,
+          "choice_group_limit": 64,
+          "weights": {
+            "repo": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+            "revision": "1355db6a052410cfd62085d94b58866fd0f2c3c5"
+          },
+          "server": {
+            "repo": "https://github.com/ekzhang/openjev-sglang",
+            "revision": "f3e1678168b2e9a298bb47639444b428b661c4b2"
           }
         }
       }
@@ -926,6 +1055,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "reflex",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "two_order_aggregation": true,
@@ -951,6 +1081,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "reflex",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "two_order_aggregation": true,
@@ -1017,7 +1148,7 @@
       "config": {
         "decision": {
           "readout": "semantic_option_head",
-          "question_types": ["choice"],
+          "question_types": ["choice", "score", "noul"],
           "loader": {
             "base_model": "openbmb/MiniCPM5-2B-Base",
             "revision": "96a57cd572a02506b4500f54427dca24970c1bac",
@@ -1033,6 +1164,11 @@
               "repo": "isHeSatoshi/smalljev-semantic-v9",
               "revision": "8e2bac7c4e922371c05899f4f000233e8096fee6",
               "file": "semantic-v9-scorer.pt"
+            },
+            "noul_score": {
+              "repo": "isHeSatoshi/smalljev-semantic-v9",
+              "revision": "8e2bac7c4e922371c05899f4f000233e8096fee6",
+              "file": "semantic-v9-noulscore.pt"
             }
           }
         }
@@ -1100,6 +1236,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "decider",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "implementation": {
@@ -1126,6 +1263,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "decider",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "implementation": {

@@ -109,49 +109,52 @@ def test_choice_score_and_noul_keep_native_distributions() -> None:
     assert noul.noul == pytest.approx(0.9820137900379085)
 
 
-def test_candidate_microbatch_matches_serial_teacher_forcing() -> None:
+def test_candidate_batch_preserves_native_token_logprobabilities() -> None:
     torch = pytest.importorskip("torch")
 
-    class ToyTokenizer:
-        def __call__(self, text: str, *, return_tensors: str) -> SimpleNamespace:
+    class Tokenizer:
+        pad_token_id = 63
+        eos_token_id = 62
+
+        def __call__(self, value: str, *, return_tensors: str) -> SimpleNamespace:
             assert return_tensors == "pt"
-            tokens = torch.tensor([[ord(char) % 128 for char in text]])
+            ids = [1, *(ord(character) % 50 + 2 for character in value)]
+            tokens = torch.tensor([ids], dtype=torch.long)
             return SimpleNamespace(input_ids=tokens, attention_mask=torch.ones_like(tokens))
 
-    class ToyModel:
+    class Model:
         device = torch.device("cpu")
-
-        def __init__(self) -> None:
-            self.calls = 0
+        calls = 0
 
         def __call__(self, tokens: object, *, attention_mask: object) -> SimpleNamespace:
+            assert attention_mask is not None
+            assert (tokens[attention_mask == 0] == Tokenizer.pad_token_id).all()
             self.calls += 1
-            assert (tokens[attention_mask == 0] == 0).all()
-            logits = torch.arange(128, dtype=torch.float32).expand(
-                tokens.shape[0], tokens.shape[1], -1
-            )
+            vocabulary = torch.arange(64, dtype=torch.float32)
+            logits = ((tokens.unsqueeze(-1) + 1) * (vocabulary + 1)) / 100
             return SimpleNamespace(logits=logits)
 
-    backend = object.__new__(JevLocalOptionsBackend)
+    tokenizer = Tokenizer()
+    model = Model()
+    backend = JevLocalOptionsBackend.__new__(JevLocalOptionsBackend)
     backend._torch = torch
-    backend._tokenizer = ToyTokenizer()
-    backend._model = ToyModel()
-    prefix = "Question:"
+    backend._tokenizer = tokenizer
+    backend._model = model
     candidates = ["A" * (index % 5 + 1) for index in range(17)]
-    actual = backend._candidate_means(prefix, candidates)
-    assert backend._model.calls == 3
     assert CANDIDATE_BATCH_SIZE == 8
+    actual = backend._candidate_means("prefix:", candidates)
+    assert model.calls == 3
 
     expected = []
     for candidate in candidates:
-        encoded = backend._tokenizer(prefix + " " + candidate, return_tensors="pt")
-        full_ids = encoded.input_ids[0].tolist()
-        common = len(prefix)
-        output = backend._model(encoded.input_ids, attention_mask=encoded.attention_mask)
-        log_probabilities = torch.log_softmax(output.logits[0], dim=-1)
+        encoded = tokenizer("prefix: " + candidate, return_tensors="pt")
+        ids = encoded.input_ids
+        logits = model(ids, attention_mask=encoded.attention_mask).logits[0]
+        common = len(tokenizer("prefix:", return_tensors="pt").input_ids[0])
+        log_probabilities = torch.log_softmax(logits, dim=-1)
         terms = [
-            log_probabilities[index - 1, encoded.input_ids[0, index]].item()
-            for index in range(common, len(full_ids))
+            log_probabilities[index - 1, ids[0, index]].item()
+            for index in range(common, ids.shape[1])
         ]
         expected.append(sum(terms) / len(terms))
-    assert actual == pytest.approx(expected)
+    assert actual == pytest.approx(expected, abs=1e-6)

@@ -239,7 +239,7 @@ class JevLocalOptionsBackend(DecisionRuntime):
             raise RuntimeErrorBase(
                 f"jev-local prefix too long: {len(prefix_ids)} tokens"
             )
-        encoded_candidates: list[tuple[list[int], int]] = []
+        tokenized: list[tuple[list[int], int]] = []
         for candidate in candidates:
             encoded = self._tokenizer(prefix + " " + candidate, return_tensors="pt")
             full_ids = encoded.input_ids[0].tolist()
@@ -260,35 +260,40 @@ class JevLocalOptionsBackend(DecisionRuntime):
                 raise RuntimeErrorBase(
                     f"jev-local candidate {candidate!r} scores zero tokens"
                 )
-            encoded_candidates.append((full_ids, common))
+            tokenized.append((full_ids, common))
 
+        pad_token_id = self._tokenizer.pad_token_id
+        if pad_token_id is None:
+            pad_token_id = self._tokenizer.eos_token_id
+        if not isinstance(pad_token_id, int):
+            raise RuntimeErrorBase("jev-local tokenizer has no padding token")
         means: list[float] = []
         with self._torch.no_grad():
-            for start in range(0, len(encoded_candidates), CANDIDATE_BATCH_SIZE):
-                chunk = encoded_candidates[start : start + CANDIDATE_BATCH_SIZE]
-                max_length = max(len(full_ids) for full_ids, _ in chunk)
-                tokens = self._torch.zeros(
-                    (len(chunk), max_length), dtype=self._torch.long
+            for offset in range(0, len(tokenized), CANDIDATE_BATCH_SIZE):
+                group = tokenized[offset : offset + CANDIDATE_BATCH_SIZE]
+                max_length = max(len(ids) for ids, _ in group)
+                tokens = self._torch.full(
+                    (len(group), max_length),
+                    pad_token_id,
+                    dtype=self._torch.long,
+                    device=self._model.device,
                 )
                 attention = self._torch.zeros_like(tokens)
-                for row, (full_ids, _) in enumerate(chunk):
-                    tokens[row, : len(full_ids)] = self._torch.tensor(full_ids)
-                    attention[row, : len(full_ids)] = 1
-                tokens = tokens.to(self._model.device)
-                attention = attention.to(self._model.device)
-                output = self._model(tokens, attention_mask=attention)
-                for row, (full_ids, common) in enumerate(chunk):
-                    candidate_logits = output.logits[
-                        row, common - 1 : len(full_ids) - 1, :
-                    ]
-                    log_probabilities = self._torch.log_softmax(
-                        candidate_logits, dim=-1
+                for row, (ids, _) in enumerate(group):
+                    length = len(ids)
+                    tokens[row, :length] = self._torch.tensor(
+                        ids, dtype=self._torch.long, device=self._model.device
                     )
-                    scored_tokens = tokens[row, common : len(full_ids)]
-                    terms = log_probabilities.gather(
-                        dim=-1, index=scored_tokens.unsqueeze(-1)
-                    ).squeeze(-1).tolist()
-                    means.append(sum(terms) / len(terms))
+                    attention[row, :length] = 1
+                output = self._model(tokens, attention_mask=attention)
+                for row, (ids, common) in enumerate(group):
+                    target_logits = output.logits[row, common - 1 : len(ids) - 1]
+                    target_ids = tokens[row, common : len(ids)]
+                    selected = target_logits.gather(
+                        -1, target_ids.unsqueeze(-1)
+                    ).squeeze(-1)
+                    terms = selected - self._torch.logsumexp(target_logits, dim=-1)
+                    means.append(terms.mean().item())
         return means
 
     def _score_question(

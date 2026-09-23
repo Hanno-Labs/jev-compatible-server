@@ -317,21 +317,45 @@ class PointerTransformersBackend(TokenLogitRuntime):
         with torch.inference_mode():
             return self._model(input_ids=ids, position_ids=positions, attention_mask=mask).last_hidden_state.float()
 
+    @staticmethod
+    def _encoding_batches(encodings: list[dict[str, Any]]) -> list[list[int]]:
+        order = sorted(range(len(encodings)), key=lambda index: len(encodings[index]["ids"]))
+        batches: list[list[int]] = []
+        batch: list[int] = []
+        for index in order:
+            length = len(encodings[index]["ids"])
+            if batch:
+                smallest = len(encodings[batch[0]]["ids"])
+                if (
+                    len(batch) >= 8
+                    or length > 2 * smallest
+                    or (len(batch) + 1) * length * length > 1_000_000_000
+                ):
+                    batches.append(batch)
+                    batch = []
+            batch.append(index)
+        if batch:
+            batches.append(batch)
+        return batches
+
     def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
         flattened: list[tuple[int, str, Any, dict[str, Any]]] = []
         for request_index, request in enumerate(requests):
             for name, question in request.questions.items():
                 flattened.append((request_index, name, question, self._encode(request, question)))
-        hidden = self._hidden_batch([item[3] for item in flattened])
         answers: list[dict[str, Any]] = [{} for _ in requests]
-        for row, (request_index, name, question, encoding) in enumerate(flattened):
-            query = hidden[row, encoding["decision"]]
-            options = hidden[row, encoding["ends"]]
-            q = self._q_weight @ query + (self._q_bias if self._q_bias is not None else 0)
-            k = options @ self._k_weight.T
-            scores = (k @ q) / math.sqrt(q.shape[-1])
-            labels = ["false", "true"] if isinstance(question, NoulQuestion) else self._labels_for_question(question)
-            answers[request_index][name] = self.answer_from_label_scores(
-                question, {label: float(value) for label, value in zip(labels, scores.tolist(), strict=True)}
-            )
+        encodings = [item[3] for item in flattened]
+        for batch in self._encoding_batches(encodings):
+            hidden = self._hidden_batch([encodings[index] for index in batch])
+            for row, index in enumerate(batch):
+                request_index, name, question, encoding = flattened[index]
+                query = hidden[row, encoding["decision"]]
+                options = hidden[row, encoding["ends"]]
+                q = self._q_weight @ query + (self._q_bias if self._q_bias is not None else 0)
+                k = options @ self._k_weight.T
+                scores = (k @ q) / math.sqrt(q.shape[-1])
+                labels = ["false", "true"] if isinstance(question, NoulQuestion) else self._labels_for_question(question)
+                answers[request_index][name] = self.answer_from_label_scores(
+                    question, {label: float(value) for label, value in zip(labels, scores.tolist(), strict=True)}
+                )
         return [DecisionResponse(model=self.model_name, answers=answer, usage=Usage()) for answer in answers]
