@@ -250,6 +250,20 @@ class DjevHTTPRuntime(NativeSystemOneHTTPRuntime):
 
     def _body(self, request: DecisionRequest) -> JsonObject:
         body = super()._body(request)
+        # DJeV rejects criterion descriptions longer than 500 Unicode characters.
+        # Keep the frozen question and criterion keys intact; adapt only the
+        # model-facing descriptions in this detached request body.
+        for question in body["questions"].values():
+            criteria = question.get("criteria")
+            if isinstance(criteria, dict):
+                question["criteria"] = {
+                    key: value[:500] if isinstance(value, str) else value
+                    for key, value in criteria.items()
+                }
+            elif isinstance(criteria, list):
+                question["criteria"] = [
+                    value[:500] if isinstance(value, str) else value for value in criteria
+                ]
         options = _decision_value(self.config, "options", {})
         if not isinstance(options, Mapping):
             raise RuntimeErrorBase("decision.options must be an object")

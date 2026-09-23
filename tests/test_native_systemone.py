@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from jev_compatible_server.native_systemone import (
     DjevHTTPRuntime,
     DjevThinkingRuntime,
@@ -192,6 +191,26 @@ def test_djev_uses_its_distinct_request_shape_and_options() -> None:
     assert captured["model"] == "djev"
     assert captured["options"]["score_mode"] == "independent_levels"
     assert "isolation" not in captured
+
+
+def test_djev_clamps_only_model_facing_criterion_descriptions() -> None:
+    request = _request()
+    request.questions["route"].criteria["cash"] = "é" * 501
+    request.questions["severity"].criteria[0] = "z" * 501
+    runtime = DjevHTTPRuntime(
+        "djev",
+        config={"decision": {"endpoint": "http://djev:8000/v1/request"}},
+    )
+
+    body = runtime._body(request)
+
+    assert body["questions"]["route"]["criteria"] == {
+        "cash": "é" * 500,
+        "card": "Card support",
+    }
+    assert body["questions"]["severity"]["criteria"] == ["z" * 500, "high"]
+    assert request.questions["route"].criteria["cash"] == "é" * 501
+    assert request.questions["severity"].criteria[0] == "z" * 501
 
 
 def test_djev_thinking_forwards_its_published_thought_budget() -> None:
