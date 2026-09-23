@@ -5,6 +5,11 @@ set -euo pipefail
 : "${RESULTS_BUCKET:?RESULTS_BUCKET is required}"
 : "${DECISION_REGISTRY:?DECISION_REGISTRY is required}"
 : "${MODEL_KEY:?MODEL_KEY is required}"
+run_mode="${RUN_MODE:-suite}"
+[[ "$run_mode" == suite || "$run_mode" == probe ]] || {
+  echo "RUN_MODE must be suite or probe" >&2
+  exit 2
+}
 
 source_root=/workflow/decision-bench
 output_root=/workflow/results
@@ -18,7 +23,9 @@ if [[ ! -f /workflow/decision-bench-runtime.tgz ]]; then
   hf buckets cp "$SOURCE_ARCHIVE" /workflow/decision-bench-runtime.tgz
 fi
 tar -xzf /workflow/decision-bench-runtime.tgz -C "$source_root" --strip-components=1
-bash "$chunk_helper" restore "$remote_result_dir" "$result_dir"
+if [[ "$run_mode" == suite ]]; then
+  bash "$chunk_helper" restore "$remote_result_dir" "$result_dir"
+fi
 
 uv sync --directory "$source_root" --extra hf
 uv pip install --python "$source_root/.venv/bin/python" "$server_root[transformers]"
@@ -37,7 +44,9 @@ cleanup() {
     kill "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
   fi
-  bash "$chunk_helper" seal "$remote_result_dir" "$result_dir" || true
+  if [[ "$run_mode" == suite ]]; then
+    bash "$chunk_helper" seal "$remote_result_dir" "$result_dir" || true
+  fi
 }
 trap cleanup EXIT TERM INT
 
@@ -65,13 +74,15 @@ wait_for_server() {
   done
 }
 
-if [[ -f "$result_dir/summary.json" ]] && jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$result_dir/summary.json" >/dev/null; then
+if [[ "$run_mode" == suite && -f "$result_dir/summary.json" ]] && jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$result_dir/summary.json" >/dev/null; then
   echo "DECISION_BENCH_SKIP model=$MODEL_KEY reason=complete" >&2
   exit 0
 fi
 
-bash "$chunk_helper" loop "$remote_result_dir" "$result_dir" &
-chunk_pid=$!
+if [[ "$run_mode" == suite ]]; then
+  bash "$chunk_helper" loop "$remote_result_dir" "$result_dir" &
+  chunk_pid=$!
+fi
 
 DECISION_REGISTRY="$DECISION_REGISTRY" \
   DECISION_MAX_BATCH_SIZE="${DECISION_MAX_BATCH_SIZE:-8}" \
@@ -80,6 +91,16 @@ DECISION_REGISTRY="$DECISION_REGISTRY" \
   --model-batch-size "${MODEL_BATCH_SIZE:-8}" >/workflow/server.log 2>&1 &
 server_pid=$!
 wait_for_server
+
+if [[ "$run_mode" == probe ]]; then
+  curl -fsS http://127.0.0.1:8000/v1/systemone \
+    -H 'Content-Type: application/json' \
+    -d "{\"model\":\"$MODEL_KEY\",\"state\":\"The light is on.\",\"questions\":{\"decision\":{\"type\":\"noul\",\"instructions\":\"Is the light on?\"}}}" \
+    >/workflow/probe-response.json
+  jq -e '.answers.decision.type == "noul" and (.answers.decision.noul | type == "number")' /workflow/probe-response.json >/dev/null
+  echo "DECISION_BENCH_PROBE_COMPLETE model=$MODEL_KEY" >&2
+  exit 0
+fi
 
 if [[ "${DECISION_NATIVE_EOS:-0}" == "1" ]]; then
   curl -fsS --max-time 180 \

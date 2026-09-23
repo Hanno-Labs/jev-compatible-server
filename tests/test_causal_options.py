@@ -139,6 +139,33 @@ def test_system_one_open_rejects_unpacked_multi_question_requests() -> None:
         value.decide(request())
 
 
+def test_system_one_sg_preserves_choice_index_prompt_and_yes_first_order() -> None:
+    class Tokenizer:
+        def apply_chat_template(
+            self, messages: list[dict[str, str]], **kwargs: object
+        ) -> str:
+            assert kwargs["enable_thinking"] is False
+            assert kwargs["add_generation_prompt"] is True
+            return messages[-1]["content"]
+
+    value = backend("system_one_sg")
+    value._tokenizer = Tokenizer()
+    choice = value._compile(request(), "pick", request().questions["pick"])
+    assert choice.labels == {"0": "odd/key", "1": "even:key"}
+    assert choice.suffixes == {"0": "0", "1": "1"}
+    assert '"name": "odd/key", "criteria": "one"' in choice.prompt
+    assert choice.prompt.endswith("choice_index:")
+    score = value._compile(request(), "score", request().questions["score"])
+    assert score.labels == {"0": "0", "1": "1"}
+    truth = value._compile(request(), "truth", request().questions["truth"])
+    assert truth.labels == {"0": "true", "1": "false"}
+    assert '"name": "yes", "criteria": "Yes"' in truth.prompt
+    assert '"name": "no", "criteria": "No"' in truth.prompt
+
+    answer = value._answer(request().questions["pick"], {"odd/key": .75, "even:key": .25})
+    assert answer.confidence == pytest.approx(.18872187554086717)
+
+
 def test_simplejev_noul_and_boundary_validation() -> None:
     value = backend("simplejev_v1")
     value._temperature = lambda: 1.0  # type: ignore[method-assign]

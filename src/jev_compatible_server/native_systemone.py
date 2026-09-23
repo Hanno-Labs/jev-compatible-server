@@ -181,6 +181,57 @@ class NativeSystemOneHTTPRuntime(DecisionRuntime):
             raise RuntimeErrorBase(f"native server probabilities do not sum to one for {name!r}")
 
 
+class SystemOneOpenHTTPRuntime(NativeSystemOneHTTPRuntime):
+    """Adapt System One Open's list-shaped public ``/decide`` API."""
+
+    def _body(self, request: DecisionRequest) -> JsonObject:
+        questions: list[JsonObject] = []
+        for name, question in request.questions.items():
+            item: JsonObject = {
+                "id": name,
+                "type": question.type,
+                "instructions": question.instructions,
+            }
+            criteria = question.model_dump(mode="json").get("criteria")
+            if isinstance(question, ChoiceQuestion):
+                item["options"] = criteria
+            elif isinstance(question, ScoreQuestion):
+                item["levels"] = criteria
+            elif criteria is not None:
+                item["criteria"] = criteria
+            questions.append(item)
+        return {"state": request.state, "questions": questions}
+
+    def _decode(self, request: DecisionRequest, raw: JsonObject) -> DecisionResponse:
+        items = raw.get("answers")
+        if not isinstance(items, list) or len(items) != len(request.questions):
+            raise RuntimeErrorBase("System One Open returned an invalid answer list")
+        answers: JsonObject = {}
+        for item in items:
+            if not isinstance(item, Mapping):
+                raise RuntimeErrorBase("System One Open returned a non-object answer")
+            name = item.get("id")
+            if not isinstance(name, str) or name not in request.questions or name in answers:
+                raise RuntimeErrorBase("System One Open returned an unknown or duplicate answer id")
+            question = request.questions[name]
+            if item.get("type") != question.type:
+                raise RuntimeErrorBase("System One Open returned a mismatched answer type")
+            answer = dict(item)
+            answer.pop("id")
+            if isinstance(question, ScoreQuestion):
+                answer["legend"] = question.criteria
+            if isinstance(question, NoulQuestion):
+                answer.pop("confidence", None)
+            self._validate_answer(question, answer, name)
+            answers[name] = answer
+        try:
+            return DecisionResponse.model_validate(
+                {"model": self.model_name, "answers": answers, "usage": {}}
+            )
+        except ValueError as exc:
+            raise RuntimeErrorBase("System One Open returned an invalid typed response") from exc
+
+
 class DjevHTTPRuntime(NativeSystemOneHTTPRuntime):
     """DJeV's native ``/v1/request`` contract and structured distributions."""
 

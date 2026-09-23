@@ -393,6 +393,48 @@
       "support_status": "pending",
       "enabled": false
     },
+    "system-one-open": {
+      "backend": "transformers",
+      "model": "mithalouni/system-one-open",
+      "description": "System One Open public typed decision endpoint; tuned checkpoint is not published",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "system_one_open_http",
+          "endpoint": "https://mithalouni--jev-serve-e2b-full-server-web.modal.run/decide",
+          "native_model": "e2b-full",
+          "public_model_name": "system-one-open",
+          "timeout_seconds": 120,
+          "server": {
+            "repo": "https://github.com/mithalouni/system-one-open",
+            "revision": "77f1f7cccf8aa752e0ed7edcc8d2094bac707bdc"
+          }
+        }
+      }
+    },
+    "system-one-sg": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3-8B",
+      "description": "Sean Goedecke System One constrained choice-index readout",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "system_one_sg",
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "loader": {
+            "model": "Qwen/Qwen3-8B",
+            "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
     "system-one-qwen3.5-4b-scorer": {
       "backend": "transformers",
       "model": "pngwn/system-one-qwen3.5-4b-scorer",
@@ -678,7 +720,8 @@
             "revision": "f7f5b7f5fa82ffc52addd066915886d497f5517b"
           },
           "options": {
-            "score_mode": "independent_levels"
+            "score_mode": "independent_levels",
+            "isolation": "independent"
           }
         }
       }
@@ -881,6 +924,54 @@
           "server": {
             "repo": "https://github.com/razorback16/openjev",
             "revision": "e04794ab36e4f7e6040c2547baecdb2737ce2e79"
+          }
+        }
+      }
+    },
+    "openjev-razorback16": {
+      "backend": "transformers",
+      "model": "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+      "description": "Razorback OpenJev native typed decision server without the thinking extension",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "native_systemone",
+          "endpoint": "http://127.0.0.1:8080/v1/systemone",
+          "native_model": "openjev-latest",
+          "public_model_name": "openjev-razorback16",
+          "timeout_seconds": 120,
+          "weights": {
+            "repo": "nvidia/diffusiongemma-26B-A4B-it-NVFP4",
+            "revision": "ec4ff3df205028f4e81c954c2227f9312b3ec2ea"
+          },
+          "server": {
+            "repo": "https://github.com/razorback16/openjev",
+            "revision": "e04794ab36e4f7e6040c2547baecdb2737ce2e79"
+          }
+        }
+      }
+    },
+    "openjev-sglang": {
+      "backend": "transformers",
+      "model": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "description": "OpenJev SGLang prefill-only native typed decision server",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "native_systemone",
+          "endpoint": "http://127.0.0.1:8080/v1/systemone",
+          "native_model": "Qwen/Qwen3.6-35B-A3B",
+          "public_model_name": "openjev-sglang",
+          "timeout_seconds": 120,
+          "weights": {
+            "repo": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+            "revision": "1355db6a052410cfd62085d94b58866fd0f2c3c5"
+          },
+          "server": {
+            "repo": "https://github.com/ekzhang/openjev-sglang",
+            "revision": "f3e1678168b2e9a298bb47639444b428b661c4b2"
           }
         }
       }

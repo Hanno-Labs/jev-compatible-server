@@ -9,6 +9,7 @@ from jev_compatible_server.native_systemone import (
     DjevThinkingRuntime,
     NativeSystemOneHTTPRuntime,
     OpenJevThinkingHTTPRuntime,
+    SystemOneOpenHTTPRuntime,
 )
 from jev_compatible_server.protocol import DecisionRequest
 from jev_compatible_server.runtime import RuntimeErrorBase
@@ -107,6 +108,46 @@ def test_native_systemone_rejects_misaligned_distribution() -> None:
     )
     with pytest.raises(RuntimeErrorBase, match="misaligned"):
         runtime.decide(_request())
+
+
+def test_system_one_open_maps_list_shaped_decide_contract() -> None:
+    captured: dict[str, Any] = {}
+
+    def post(url: str, body: dict[str, Any], _: float) -> dict[str, Any]:
+        captured.update(url=url, body=body)
+        return {
+            "model": "e2b-full",
+            "answers": [
+                {
+                    "id": "route", "type": "choice", "choice": "card",
+                    "probabilities": {"cash": 0.2, "card": 0.8}, "confidence": 0.6,
+                },
+                {"id": "urgent", "type": "noul", "noul": 0.7, "confidence": 0.4},
+                {
+                    "id": "severity", "type": "score", "score": 0.9,
+                    "probabilities": {"0": 0.1, "1": 0.9}, "confidence": 0.8,
+                },
+            ],
+        }
+
+    runtime = SystemOneOpenHTTPRuntime(
+        "mithalouni/system-one-open",
+        config={"decision.endpoint": "https://example.test/decide"},
+        post_json=post,
+    )
+    response = runtime.decide(_request())
+
+    assert captured["url"] == "https://example.test/decide"
+    assert "model" not in captured["body"]
+    questions = captured["body"]["questions"]
+    assert questions[0]["options"] == {"cash": "ATM", "card": "Card support"}
+    assert questions[1]["id"] == "urgent" and "criteria" not in questions[1]
+    assert questions[2]["levels"] == ["low", "high"]
+    assert response.model == "mithalouni/system-one-open"
+    assert response.answers["route"].probabilities["card"] == 0.8
+    assert response.answers["severity"].legend == ["low", "high"]
+    assert response.answers["urgent"].noul == 0.7
+    assert response.usage.input_tokens == 0
 
 
 def test_djev_uses_its_distinct_request_shape_and_options() -> None:

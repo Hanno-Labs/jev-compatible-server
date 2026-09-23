@@ -2,12 +2,12 @@ type: task
 name: __TASK_NAME__
 fleets: [default]
 spot_policy: on-demand
-image: pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
+image: __IMAGE__
 shell: bash
 max_duration: 12h
 stop_duration: 5m
 files:
-  - ./run_registry_decisionbench.sh:/workflow/run_registry_decisionbench.sh
+  - ./run_native_catalog_decisionbench.sh:/workflow/run_native_catalog_decisionbench.sh
   - ./chunked_results.sh:/workflow/chunked_results.sh
   - ./decision-bench-runtime.tgz:/workflow/decision-bench-runtime.tgz
   - ../pyproject.toml:/workflow/jev-compatible-server/pyproject.toml
@@ -21,19 +21,19 @@ env:
   - DECISION_REGISTRY=/workflow/public-models.json
   - MODEL_KEY=__MODEL_KEY__
   - RUN_MODE=__RUN_MODE__
-  - MODEL_BATCH_SIZE=__BATCH_SIZE__
   - RESULTS_CHUNK_ROWS=1000
   - RESULTS_CHUNK_INTERVAL_SECONDS=60
 retry:
   on_events: [no-capacity, interruption, error]
   duration: 12h
 commands:
-  - apt-get update -qq && apt-get install -y -qq jq curl
+  - apt-get update -qq && apt-get install -y -qq build-essential cmake git jq curl libssl-dev
   - pip install -U uv "hf>=1.23" "huggingface_hub>=1.23" hf_xet
-  - bash /workflow/run_registry_decisionbench.sh
+  - bash /workflow/run_native_catalog_decisionbench.sh
 resources:
   gpu:
-    name: [L40S, A100, H100, H200, B200]
+    name: __GPU_NAMES__
     count: 1
     memory: __GPU_MEMORY__GB..
-  disk: 200GB..
+  disk: 250GB..
+

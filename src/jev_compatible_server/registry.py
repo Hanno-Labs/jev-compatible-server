@@ -32,7 +32,9 @@ from .native_systemone import (
     DjevHTTPRuntime,
     DjevThinkingRuntime,
     JeffHTTPRuntime,
+    NativeSystemOneHTTPRuntime,
     OpenJevThinkingHTTPRuntime,
+    SystemOneOpenHTTPRuntime,
     WinnowHTTPRuntime,
 )
 from .protocol import DecisionRequest, DecisionResponse, UnsupportedAnswer, Usage
@@ -178,6 +180,10 @@ def build_transformers_runtime(
         return HiddenStateProbeBackend(model_id, config=effective_config)
     if readout == "laya_native":
         return LayaBackend(model_id, config=effective_config)
+    if readout == "native_systemone":
+        return NativeSystemOneHTTPRuntime(model_id, config=effective_config)
+    if readout == "system_one_open_http":
+        return SystemOneOpenHTTPRuntime(model_id, config=effective_config)
     if readout == "decision_native":
         return DecisionNativeRuntime(model_id, config=effective_config)
     if readout == "diffusion_structured_read":
