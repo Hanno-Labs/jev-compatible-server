@@ -8,7 +8,8 @@
   <a href="docs/README.md">Documentation</a> ·
   <a href="docs/API.md">API</a> ·
   <a href="docs/MODELS.md">Models</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="https://github.com/Hanno-Labs/decision-bench/issues">Issues</a>
 </p>
 
 ## Quickstart
@@ -116,7 +117,8 @@ checkpoints and the exact distinction.
 
 Contributions for new backends, reusable readouts, model recipes, tests, and
 documentation are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) before making
-a change.
+a change. Report bugs and request features in the
+[central DecisionBench issue tracker](https://github.com/Hanno-Labs/decision-bench/issues).
 
 ## Acknowledgements
 
