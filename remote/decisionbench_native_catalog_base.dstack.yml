@@ -28,7 +28,7 @@ retry:
   duration: 12h
 commands:
   - apt-get update -qq && apt-get install -y -qq build-essential cmake git jq curl libssl-dev
-  - pip install -U uv "hf>=1.23" "huggingface_hub>=1.23" hf_xet
+  - if command -v pip >/dev/null 2>&1; then pip install -U uv "hf>=1.23" "huggingface_hub>=1.23" hf_xet; else uv pip install --python "$(command -v python)" "hf>=1.23" "huggingface_hub>=1.23" hf_xet; fi
   - bash /workflow/run_native_catalog_decisionbench.sh
 resources:
   gpu:
@@ -36,4 +36,3 @@ resources:
     count: 1
     memory: __GPU_MEMORY__GB..
   disk: 250GB..
-
