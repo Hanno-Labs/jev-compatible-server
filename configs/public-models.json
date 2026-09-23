@@ -416,7 +416,7 @@
     "system-one-sg": {
       "backend": "transformers",
       "model": "Qwen/Qwen3-8B",
-      "description": "Sean Goedecke System One constrained choice-index readout",
+      "description": "Sean Goedecke System One choice-index readout; conditional decimal-sequence extension above 10 options",
       "support_status": "supported",
       "enabled": true,
       "config": {
