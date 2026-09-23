@@ -145,7 +145,7 @@ start_native_server() {
       uv pip install --python "$native_root/jeff/.venv/bin/python" \
         --torch-backend=cu128 --force-reinstall "torch==2.11.0"
       "$native_root/jeff/.venv/bin/python" -c 'import torch; assert torch.cuda.is_available(), "JEFF_CUDA_UNAVAILABLE"; print(f"JEFF_GPU_PROBE_COMPLETE torch={torch.__version__} cuda={torch.version.cuda} device={torch.cuda.get_device_name(0)}")'
-      start_process native bash -c "cd '$native_root/jeff'; JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 JEFF_MAX_LABELS=255 uv run --no-sync jeff"
+      start_process native bash -c "cd '$native_root/jeff'; JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 JEFF_MAX_LABELS=255 JEFF_MAX_BATCH=${JEFF_MAX_BATCH:-16} uv run --no-sync jeff"
       native_pid=$started_pid
       wait_for_http native "$native_pid" http://127.0.0.1:8000/healthz
       ;;
@@ -233,6 +233,73 @@ run_probe() {
   echo "NATIVE_CATALOG_PROBE_COMPLETE model=$MODEL_KEY" >&2
 }
 
+run_jeff_replay() {
+  [[ "$MODEL_KEY" == jeff && -n "${JEFF_REPLAY_CHUNK:-}" ]] || return 0
+  hf buckets cp "$JEFF_REPLAY_CHUNK" /workflow/jeff-replay-chunk.jsonl >/dev/null
+  (cd "$source_root" && uv run python - <<'PY'
+import hashlib
+import json
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+
+import httpx
+
+from decision_bench.models.jev_openrouter import build_jev_request
+from decision_bench.models.jev_server import JevServerDecisionModel
+from decision_bench.prompt import fit_example_to_token_budget
+from decision_bench.schemas import DecisionExample
+
+with open("/workflow/jeff-replay-chunk.jsonl", encoding="utf-8") as source:
+    record = next(
+        (
+            row
+            for line in source
+            if (row := json.loads(line)).get("status") == "error"
+            and row.get("error_type") == "HTTPStatusError"
+        ),
+        None,
+    )
+if record is None:
+    raise SystemExit("JEFF_REPLAY_NO_HTTP_ERROR_ROW")
+
+example = DecisionExample.model_validate(record["example"])
+row_hash = hashlib.sha256(example.row_id.encode()).hexdigest()[:16]
+print(f"JEFF_REPLAY_ROW_SHA256={row_hash}", flush=True)
+with JevServerDecisionModel(base_url="http://127.0.0.1:8100", model="jeff") as model:
+    fitted, _ = fit_example_to_token_budget(
+        example,
+        max_input_tokens=model.effective_input_token_budget,
+        count_tokens=model._state_question_tokens,
+    )
+native_body, _ = build_jev_request(fitted, model="gliformer-large-v1")
+compat_body, _ = build_jev_request(fitted, model="jeff")
+
+def status(url: str, body: dict[str, object]) -> str:
+    try:
+        with httpx.Client(timeout=httpx.Timeout(180.0, connect=10.0)) as client:
+            return str(client.post(url, json=body).status_code)
+    except Exception as exc:
+        return type(exc).__name__
+
+native_url = "http://127.0.0.1:8000/v1/systemone"
+compat_url = "http://127.0.0.1:8100/v1/systemone"
+print(f"JEFF_REPLAY_NATIVE_STATUS={status(native_url, native_body)}", flush=True)
+print(f"JEFF_REPLAY_COMPAT_STATUS={status(compat_url, compat_body)}", flush=True)
+with ThreadPoolExecutor(max_workers=8) as pool:
+    results = list(pool.map(lambda _: status(compat_url, compat_body), range(8)))
+print(f"JEFF_REPLAY_CONCURRENT_STATUS_COUNTS={dict(Counter(results))}", flush=True)
+PY
+  )
+  if [[ -f /workflow/compat.log ]]; then
+    sed -n -E 's/^.*(decision inference failed exception_type=[A-Za-z0-9_]+ frames=[^[:cntrl:]]+).*$/\1/p' /workflow/compat.log |
+      sort | uniq -c | sort -rn | head -n 20 >&2 || true
+  fi
+  if [[ -f /workflow/native.log ]]; then
+    grep -oE '(^|[[:space:]])[A-Za-z_][A-Za-z0-9_.]*(Error|Exception):' /workflow/native.log |
+      sort | uniq -c | sort -rn | head -n 20 >&2 || true
+  fi
+}
+
 summary_is_complete() {
   if [[ "${RETRY_ERRORS:-0}" == "1" ]]; then
     jq -e '.requested_rows == 23900 and .successful_rows == 23900 and .error_rows == 0' "$1" >/dev/null
@@ -254,7 +321,7 @@ run_suite() {
   (cd "$source_root" && uv run python -m decision_bench.cli run-jev-server \
     "$source_root/task_specs/decisionbench-dev.toml" "$result_dir" \
     --project-root "$source_root" --base-url "http://127.0.0.1:${compat_port}" \
-    --model "$MODEL_KEY" --concurrency 8) &
+    --model "$MODEL_KEY" --concurrency "${EVAL_CONCURRENCY:-8}") &
   local evaluation_pid=$!
   while kill -0 "$evaluation_pid" 2>/dev/null; do
     for watched in "$native_pid:native" "$compat_pid:compat"; do
@@ -297,7 +364,10 @@ start_native_server
 start_compat_server
 
 case "${RUN_MODE:-suite}" in
-  probe) run_probe ;;
+  probe)
+    run_probe
+    run_jeff_replay
+    ;;
   suite)
     if [[ "$MODEL_KEY" == openjev-sglang || "$MODEL_KEY" == jeff ]]; then
       run_probe
