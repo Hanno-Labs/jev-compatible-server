@@ -144,7 +144,7 @@ start_native_server() {
       (cd "$native_root/jeff" && uv run hf download knowledgator/gliformer-large-v1 --revision d0a4e53d09cebe6bc963dd9be319d4279084bb2d --local-dir models/gliformer-large-v1)
       start_process native bash -c "cd '$native_root/jeff'; JEFF_API_KEYS=decisionbench JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 uv run jeff"
       native_pid=$started_pid
-      wait_for_http native "$native_pid" http://127.0.0.1:8000/health
+      wait_for_http native "$native_pid" http://127.0.0.1:8000/healthz
       ;;
     openjev-thinking|openjev-razorback16)
       # The renderer selects OpenJev's pinned public image.  Installing the
@@ -247,4 +247,3 @@ case "${RUN_MODE:-suite}" in
   suite) run_suite ;;
   *) echo "RUN_MODE must be probe or suite" >&2; exit 2 ;;
 esac
-

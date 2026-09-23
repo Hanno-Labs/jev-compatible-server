@@ -2,6 +2,7 @@ import math
 
 import pytest
 
+from jev_compatible_server.backends import PointerTransformersBackend
 from jev_compatible_server.custom_heads import (
     build_smalljev_semantic_ids,
     calibration_temperature,
@@ -28,6 +29,20 @@ def test_openjev_metadata_requires_declared_artifact_contract() -> None:
     )
 
     assert metadata["readout"] == "openjev_scalar_head"
+
+
+def test_pointer_batches_bound_padding_and_dense_mask_without_losing_rows() -> None:
+    lengths = [4000, 29000, 400, 3100, 28000, 600, 30000, 2800, 500]
+    batches = PointerTransformersBackend._encoding_batches(
+        [{"ids": range(length)} for length in lengths]
+    )
+    assert sorted(index for batch in batches for index in batch) == list(range(len(lengths)))
+    assert len(batches[0]) == 3
+    for batch in batches:
+        batch_lengths = [lengths[index] for index in batch]
+        assert len(batch) <= 8
+        assert max(batch_lengths) <= 2 * min(batch_lengths)
+        assert len(batch) * max(batch_lengths) ** 2 <= 1_000_000_000
 
 
 @pytest.mark.parametrize("value", [0, -0.1, math.inf, math.nan, True, "1.0"])
