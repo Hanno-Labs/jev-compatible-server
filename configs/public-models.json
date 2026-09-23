@@ -678,6 +678,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "jqv",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 3.0225814579771493,
           "loader": {
@@ -700,6 +701,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "litjev",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "loader": {
@@ -1050,6 +1052,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "reflex",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "two_order_aggregation": true,
@@ -1075,6 +1078,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "reflex",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "two_order_aggregation": true,
@@ -1229,6 +1233,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "decider",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "implementation": {
@@ -1255,6 +1260,7 @@
         "decision": {
           "readout": "causal_options",
           "profile": "decider",
+          "sequence_option_extension": true,
           "question_types": ["choice", "score", "noul"],
           "temperature": 1.0,
           "implementation": {
