@@ -209,6 +209,8 @@ def test_system_one_sg_scores_multitoken_decimal_indices() -> None:
     assert scores["1"] == pytest.approx(float(root[1]))
     assert scores["10"] == pytest.approx(float(root[1] + child[0]))
     assert scores["11"] == pytest.approx(float(root[1] + child[1]))
+    value.metadata = {"profile": "litjev", "sequence_option_extension": True}
+    assert value._score(compiled) == scores
 
 
 def test_simplejev_noul_and_boundary_validation() -> None:

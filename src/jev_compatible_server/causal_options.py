@@ -372,26 +372,25 @@ class CausalOptionsBackend(DecisionRuntime):
         return result
 
     def _score(self, compiled: OptionPrompt) -> dict[str, float]:
-        if self._profile() == "system_one_sg" and len(compiled.labels) > 10:
-            return self._score_system_one_sg_sequences(compiled)
+        if (self._profile() == "system_one_sg" and len(compiled.labels) > 10) or self.metadata.get("sequence_option_extension") is True:
+            return self._score_sequences(compiled)
         ids = self._token_ids(compiled); encoded = self._tokenizer(compiled.prompt, return_tensors="pt", add_special_tokens=compiled.add_special_tokens); device = next(self._model.parameters()).device; encoded = {k: v.to(device) for k, v in encoded.items()}
         context = self._torch.inference_mode() if hasattr(self._torch, "inference_mode") else nullcontext()
         with context: output = self._model(**encoded)
         pos = int(encoded["attention_mask"][0].sum().item()) - 1 if "attention_mask" in encoded else -1; row = output.logits[0, pos]
         return {label: float(row[token].item()) for label, token in ids.items()}
 
-    def _score_system_one_sg_sequences(self, compiled: OptionPrompt) -> dict[str, float]:
-        """Extend SG's single-token index readout to decimal token sequences.
+    def _score_sequences(self, compiled: OptionPrompt) -> dict[str, float]:
+        """Score complete option-token continuations when labels are multi-token.
 
-        SG's native 0-9 path is unchanged. For larger choice sets, score each
-        decimal index by its full conditional token log-probability and then
-        apply the same option-level temperature softmax as the native path.
+        For one-token labels this differs from the native logit only by a common
+        normalizer, so the option-level temperature softmax is unchanged.
         """
         base = self._tokenizer.encode(
             compiled.prompt, add_special_tokens=compiled.add_special_tokens
         )
         if not base:
-            raise RuntimeErrorBase("system_one_sg prompt has no tokens")
+            raise RuntimeErrorBase("decision prompt has no tokens")
         paths: dict[str, tuple[int, ...]] = {}
         for label, suffix in compiled.suffixes.items():
             after = self._tokenizer.encode(

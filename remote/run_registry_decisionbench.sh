@@ -117,6 +117,11 @@ if [[ "$run_mode" == probe ]]; then
       curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-eleven-response.json
     jq -e '.answers.many.type == "choice" and (.answers.many.probabilities | length == 11)' /workflow/probe-eleven-response.json >/dev/null
   fi
+  if [[ "$MODEL_KEY" == qwen3.8-27b ]]; then
+    jq -nc '{model:"qwen3.8-27b",state:"The light is on.",questions:{many:{type:"choice",instructions:"Choose the matching option.",criteria:(reduce range(27) as $i ({}; . + {("c"+($i|tostring)):("candidate "+($i|tostring))}))}}}' |
+      curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-twenty-seven-response.json
+    jq -e '.answers.many.type == "choice" and (.answers.many.probabilities | length == 27)' /workflow/probe-twenty-seven-response.json >/dev/null
+  fi
   echo "DECISION_BENCH_PROBE_COMPLETE model=$MODEL_KEY" >&2
   exit 0
 fi

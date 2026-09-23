@@ -702,6 +702,29 @@
         }
       }
     },
+    "qwen3.8-27b": {
+      "backend": "transformers",
+      "model": "Qwen/Qwen3.8-27B",
+      "description": "Raw Qwen3.8-27B no-thinking option-letter baseline using a LitJev-style prompt and conditional sequence readout; no checkpoint adapter",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "causal_options",
+          "profile": "litjev",
+          "sequence_option_extension": true,
+          "question_types": ["choice", "score", "noul"],
+          "temperature": 1.0,
+          "loader": {
+            "model": "Qwen/Qwen3.8-27B",
+            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+            "dtype": "bf16",
+            "device_map": "auto",
+            "attn_implementation": "sdpa"
+          }
+        }
+      }
+    },
     "djev": {
       "backend": "transformers",
       "model": "google/diffusiongemma-26B-A4B-it",
