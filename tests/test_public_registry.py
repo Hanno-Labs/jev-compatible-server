@@ -115,6 +115,12 @@ def test_public_registry_supports_native_catalog_servers_with_pinned_weights() -
 
 def test_public_registry_supports_catalog_causal_profiles_with_pinned_weights() -> None:
     registry = ModelRegistry.from_builtin()
+    raw_qwen = registry.definition.models["qwen3.8-27b"]
+    raw_decision = raw_qwen.resolved_config()["decision"]
+    assert raw_qwen.model == "Qwen/Qwen3.8-27B"
+    assert raw_decision["profile"] == "litjev"
+    assert raw_decision["sequence_option_extension"] is True
+    assert raw_decision["loader"]["revision"] == "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
     expected = {
         "semif-openjev-qwen3.5-4b": (
             "semif",

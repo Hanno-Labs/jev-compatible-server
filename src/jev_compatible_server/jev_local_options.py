@@ -238,39 +238,61 @@ class JevLocalOptionsBackend(DecisionRuntime):
             raise RuntimeErrorBase(
                 f"jev-local prefix too long: {len(prefix_ids)} tokens"
             )
+        tokenized: list[tuple[list[int], int]] = []
+        for candidate in candidates:
+            encoded = self._tokenizer(prefix + " " + candidate, return_tensors="pt")
+            full_ids = encoded.input_ids[0].tolist()
+            if len(full_ids) > 4096:
+                raise RuntimeErrorBase(
+                    f"jev-local input too long: {len(full_ids)} tokens"
+                )
+            common = 0
+            while (
+                common < len(prefix_ids)
+                and common < len(full_ids)
+                and prefix_ids[common] == full_ids[common]
+            ):
+                common += 1
+            if common == 0:
+                raise RuntimeErrorBase("jev-local candidate shares no token prefix")
+            if common == len(full_ids):
+                raise RuntimeErrorBase(
+                    f"jev-local candidate {candidate!r} scores zero tokens"
+                )
+            tokenized.append((full_ids, common))
+
+        pad_token_id = self._tokenizer.pad_token_id
+        if pad_token_id is None:
+            pad_token_id = self._tokenizer.eos_token_id
+        if not isinstance(pad_token_id, int):
+            raise RuntimeErrorBase("jev-local tokenizer has no padding token")
         means: list[float] = []
         with self._torch.no_grad():
-            for candidate in candidates:
-                encoded = self._tokenizer(
-                    prefix + " " + candidate, return_tensors="pt"
+            for offset in range(0, len(tokenized), 4):
+                group = tokenized[offset : offset + 4]
+                max_length = max(len(ids) for ids, _ in group)
+                tokens = self._torch.full(
+                    (len(group), max_length),
+                    pad_token_id,
+                    dtype=self._torch.long,
+                    device=self._model.device,
                 )
-                full_ids = encoded.input_ids[0].tolist()
-                if len(full_ids) > 4096:
-                    raise RuntimeErrorBase(
-                        f"jev-local input too long: {len(full_ids)} tokens"
+                attention = self._torch.zeros_like(tokens)
+                for row, (ids, _) in enumerate(group):
+                    length = len(ids)
+                    tokens[row, :length] = self._torch.tensor(
+                        ids, dtype=self._torch.long, device=self._model.device
                     )
-                common = 0
-                while (
-                    common < len(prefix_ids)
-                    and common < len(full_ids)
-                    and prefix_ids[common] == full_ids[common]
-                ):
-                    common += 1
-                if common == 0:
-                    raise RuntimeErrorBase("jev-local candidate shares no token prefix")
-                if common == len(full_ids):
-                    raise RuntimeErrorBase(
-                        f"jev-local candidate {candidate!r} scores zero tokens"
-                    )
-                tokens = encoded.input_ids.to(self._model.device)
-                attention = encoded.attention_mask.to(self._model.device)
+                    attention[row, :length] = 1
                 output = self._model(tokens, attention_mask=attention)
-                log_probabilities = self._torch.log_softmax(output.logits[0], dim=-1)
-                terms = [
-                    log_probabilities[index - 1, tokens[0, index]].item()
-                    for index in range(common, len(full_ids))
-                ]
-                means.append(sum(terms) / len(terms))
+                for row, (ids, common) in enumerate(group):
+                    target_logits = output.logits[row, common - 1 : len(ids) - 1]
+                    target_ids = tokens[row, common : len(ids)]
+                    selected = target_logits.gather(
+                        -1, target_ids.unsqueeze(-1)
+                    ).squeeze(-1)
+                    terms = selected - self._torch.logsumexp(target_logits, dim=-1)
+                    means.append(terms.mean().item())
         return means
 
     def _score_question(

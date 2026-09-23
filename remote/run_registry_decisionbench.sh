@@ -5,6 +5,11 @@ set -euo pipefail
 : "${RESULTS_BUCKET:?RESULTS_BUCKET is required}"
 : "${DECISION_REGISTRY:?DECISION_REGISTRY is required}"
 : "${MODEL_KEY:?MODEL_KEY is required}"
+run_mode="${RUN_MODE:-suite}"
+[[ "$run_mode" == suite || "$run_mode" == probe ]] || {
+  echo "RUN_MODE must be suite or probe" >&2
+  exit 2
+}
 
 source_root=/workflow/decision-bench
 output_root=/workflow/results
@@ -18,10 +23,18 @@ if [[ ! -f /workflow/decision-bench-runtime.tgz ]]; then
   hf buckets cp "$SOURCE_ARCHIVE" /workflow/decision-bench-runtime.tgz
 fi
 tar -xzf /workflow/decision-bench-runtime.tgz -C "$source_root" --strip-components=1
-bash "$chunk_helper" restore "$remote_result_dir" "$result_dir"
+if [[ "$run_mode" == suite ]]; then
+  bash "$chunk_helper" restore "$remote_result_dir" "$result_dir"
+fi
 
 uv sync --directory "$source_root" --extra hf
 uv pip install --python "$source_root/.venv/bin/python" "$server_root[transformers]"
+if [[ "${JEV_LOCAL_OPTIMIZED:-0}" == "1" ]]; then
+  uv pip install --python "$source_root/.venv/bin/python" \
+    'flash-linear-attention[cuda]==0.5.2' \
+    'causal-conv1d @ https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.7.0/causal_conv1d-1.7.0%2Bcu12torch2.8cxx11abiTRUE-cp312-cp312-linux_x86_64.whl'
+  echo "DECISION_BENCH_JEV_LOCAL_KERNEL optimized=1" >&2
+fi
 if [[ "${DECISION_NATIVE_EOS:-0}" == "1" ]]; then
   uv pip install --python "$source_root/.venv/bin/python" \
     'torch==2.9.1' 'transformers==5.17.0' 'flash-linear-attention==0.5.2'
@@ -37,7 +50,9 @@ cleanup() {
     kill "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
   fi
-  bash "$chunk_helper" seal "$remote_result_dir" "$result_dir" || true
+  if [[ "$run_mode" == suite ]]; then
+    bash "$chunk_helper" seal "$remote_result_dir" "$result_dir" || true
+  fi
 }
 trap cleanup EXIT TERM INT
 
@@ -65,13 +80,23 @@ wait_for_server() {
   done
 }
 
-if [[ -f "$result_dir/summary.json" ]] && jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$result_dir/summary.json" >/dev/null; then
+summary_is_complete() {
+  if [[ "${RETRY_ERRORS:-0}" == "1" ]]; then
+    jq -e '.requested_rows == 23900 and .successful_rows == 23900 and .error_rows == 0' "$1" >/dev/null
+  else
+    jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$1" >/dev/null
+  fi
+}
+
+if [[ "$run_mode" == suite && -f "$result_dir/summary.json" ]] && summary_is_complete "$result_dir/summary.json"; then
   echo "DECISION_BENCH_SKIP model=$MODEL_KEY reason=complete" >&2
   exit 0
 fi
 
-bash "$chunk_helper" loop "$remote_result_dir" "$result_dir" &
-chunk_pid=$!
+if [[ "$run_mode" == suite ]]; then
+  bash "$chunk_helper" loop "$remote_result_dir" "$result_dir" &
+  chunk_pid=$!
+fi
 
 DECISION_REGISTRY="$DECISION_REGISTRY" \
   DECISION_MAX_BATCH_SIZE="${DECISION_MAX_BATCH_SIZE:-8}" \
@@ -80,6 +105,31 @@ DECISION_REGISTRY="$DECISION_REGISTRY" \
   --model-batch-size "${MODEL_BATCH_SIZE:-8}" >/workflow/server.log 2>&1 &
 server_pid=$!
 wait_for_server
+
+if [[ "$run_mode" == probe ]]; then
+  curl -fsS http://127.0.0.1:8000/v1/systemone \
+    -H 'Content-Type: application/json' \
+    -d "{\"model\":\"$MODEL_KEY\",\"state\":\"The light is on.\",\"questions\":{\"decision\":{\"type\":\"noul\",\"instructions\":\"Is the light on?\"}}}" \
+    >/workflow/probe-response.json
+  jq -e '.answers.decision.type == "noul" and (.answers.decision.noul | type == "number")' /workflow/probe-response.json >/dev/null
+  if [[ "$MODEL_KEY" == system-one-sg ]]; then
+    jq -nc '{model:"system-one-sg",state:"The light is on.",questions:{many:{type:"choice",instructions:"Choose the matching option.",criteria:(reduce range(11) as $i ({}; . + {("c"+($i|tostring)):("candidate "+($i|tostring))}))}}}' |
+      curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-eleven-response.json
+    jq -e '.answers.many.type == "choice" and (.answers.many.probabilities | length == 11)' /workflow/probe-eleven-response.json >/dev/null
+  fi
+  if [[ "$MODEL_KEY" == open-jev-zefan-2b ]]; then
+    jq -nc '{model:"open-jev-zefan-2b",state:([range(0;6000)|tostring] | join(" ")),questions:{picked:{type:"choice",instructions:"Choose one.",criteria:{yes:"The light is on",no:"The light is off"}}}}' |
+      curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-overlong-response.json
+    jq -e '.answers.picked.type == "choice" and (.answers.picked.probabilities | length == 2)' /workflow/probe-overlong-response.json >/dev/null
+  fi
+  if [[ "$MODEL_KEY" == qwen3.8-27b || "$MODEL_KEY" == jqv || "$MODEL_KEY" == litjev || "$MODEL_KEY" == reflex-4b || "$MODEL_KEY" == reflex-27b || "$MODEL_KEY" == decider-2b || "$MODEL_KEY" == decider-35b-a3b ]]; then
+    jq -nc '{model:"qwen3.8-27b",state:"The light is on.",questions:{many:{type:"choice",instructions:"Choose the matching option.",criteria:(reduce range(27) as $i ({}; . + {("c"+($i|tostring)):("candidate "+($i|tostring))}))}}}' |
+      curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-twenty-seven-response.json
+    jq -e '.answers.many.type == "choice" and (.answers.many.probabilities | length == 27)' /workflow/probe-twenty-seven-response.json >/dev/null
+  fi
+  echo "DECISION_BENCH_PROBE_COMPLETE model=$MODEL_KEY" >&2
+  exit 0
+fi
 
 if [[ "${DECISION_NATIVE_EOS:-0}" == "1" ]]; then
   curl -fsS --max-time 180 \
@@ -95,7 +145,7 @@ fi
   --project-root "$source_root" --base-url http://127.0.0.1:8000 \
   --model "$MODEL_KEY" --concurrency "${EVAL_CONCURRENCY:-8}")
 
-jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$result_dir/summary.json" >/dev/null
+summary_is_complete "$result_dir/summary.json"
 kill "$chunk_pid" 2>/dev/null || true
 wait "$chunk_pid" 2>/dev/null || true
 chunk_pid=
