@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
 from jev_compatible_server.native_systemone import (
     DjevHTTPRuntime,
     DjevThinkingRuntime,
@@ -83,6 +84,70 @@ def test_native_systemone_preserves_native_typed_distribution() -> None:
     answer_payload = response.model_dump(mode="json")["answers"]
     assert answer_payload["route"]["probabilities"] == {"cash": 0.2, "card": 0.8}
     assert answer_payload["severity"]["legend"] == ["low", "high"]
+
+
+def test_native_systemone_normalizes_four_decimal_native_probabilities() -> None:
+    def post(_: str, __: dict[str, Any], ___: float) -> dict[str, Any]:
+        return {
+            "answers": {
+                "route": {
+                    "type": "choice",
+                    "choice": "card",
+                    "probabilities": {"cash": 0.3333, "card": 0.6666},
+                    "confidence": 0.6666,
+                },
+                "urgent": {"type": "noul", "noul": 0.7},
+                "severity": {
+                    "type": "score",
+                    "score": 0.6666,
+                    "probabilities": {"0": 0.3333, "1": 0.6666},
+                    "confidence": 0.6666,
+                },
+            }
+        }
+
+    runtime = NativeSystemOneHTTPRuntime(
+        "public/model",
+        config={"decision.endpoint": "http://native/v1/systemone"},
+        post_json=post,
+    )
+    response = runtime.decide(_request())
+
+    for name in ("route", "severity"):
+        probabilities = response.answers[name].probabilities
+        assert sum(probabilities.values()) == pytest.approx(1.0)
+        assert probabilities["card" if name == "route" else "1"] == pytest.approx(
+            0.6666 / 0.9999
+        )
+
+
+def test_native_systemone_rejects_large_probability_mass_error() -> None:
+    def post(_: str, __: dict[str, Any], ___: float) -> dict[str, Any]:
+        return {
+            "answers": {
+                "route": {
+                    "type": "choice",
+                    "choice": "card",
+                    "probabilities": {"cash": 0.2, "card": 0.2},
+                    "confidence": 0.2,
+                },
+                "urgent": {"type": "noul", "noul": 0.7},
+                "severity": {
+                    "type": "score",
+                    "score": 0.5,
+                    "probabilities": {"0": 0.5, "1": 0.5},
+                    "confidence": 0.5,
+                },
+            }
+        }
+
+    runtime = NativeSystemOneHTTPRuntime(
+        "public/model",
+        config={"decision.endpoint": "http://native/v1/systemone"},
+        post_json=post,
+    )
+    with pytest.raises(RuntimeErrorBase, match="sum to one"):
+        runtime.decide(_request())
 
 
 def test_native_systemone_groups_only_choices_above_configured_cap() -> None:

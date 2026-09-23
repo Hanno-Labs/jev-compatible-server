@@ -142,7 +142,7 @@ start_native_server() {
       clone_pinned https://github.com/logan-markewich/jeff.git 34b32f99a727c47b679adde33f4702a001e02979 "$native_root/jeff"
       uv sync --directory "$native_root/jeff"
       (cd "$native_root/jeff" && uv run hf download knowledgator/gliformer-large-v1 --revision d0a4e53d09cebe6bc963dd9be319d4279084bb2d --local-dir models/gliformer-large-v1)
-      start_process native bash -c "cd '$native_root/jeff'; JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 uv run jeff"
+      start_process native bash -c "cd '$native_root/jeff'; JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 JEFF_MAX_LABELS=255 uv run jeff"
       native_pid=$started_pid
       wait_for_http native "$native_pid" http://127.0.0.1:8000/healthz
       ;;
@@ -207,11 +207,11 @@ run_probe() {
     return 1
   fi
   jq -e '.answers.on.type == "noul" and (.answers.on.noul | type == "number")' /workflow/probe-response.json >/dev/null
-  if [[ "$MODEL_KEY" == openjev-thinking || "$MODEL_KEY" == openjev-razorback16 || "$MODEL_KEY" == djev-thinking || "$MODEL_KEY" == winnow-12b ]]; then
+  if [[ "$MODEL_KEY" == openjev-thinking || "$MODEL_KEY" == openjev-razorback16 || "$MODEL_KEY" == openjev-sglang || "$MODEL_KEY" == djev-thinking || "$MODEL_KEY" == winnow-12b || "$MODEL_KEY" == jeff ]]; then
     local wide_count=255
     if [[ "$MODEL_KEY" == djev-thinking ]]; then
       wide_count=27
-    elif [[ "$MODEL_KEY" == winnow-12b ]]; then
+    elif [[ "$MODEL_KEY" == winnow-12b || "$MODEL_KEY" == openjev-sglang ]]; then
       wide_count=65
     fi
     local wide_status
@@ -287,6 +287,11 @@ start_compat_server
 
 case "${RUN_MODE:-suite}" in
   probe) run_probe ;;
-  suite) run_suite ;;
+  suite)
+    if [[ "$MODEL_KEY" == openjev-sglang || "$MODEL_KEY" == jeff ]]; then
+      run_probe
+    fi
+    run_suite
+    ;;
   *) echo "RUN_MODE must be probe or suite" >&2; exit 2 ;;
 esac

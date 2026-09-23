@@ -231,7 +231,7 @@ class NativeSystemOneHTTPRuntime(DecisionRuntime):
         return response
 
     @staticmethod
-    def _validate_answer(question: Any, answer: Mapping[str, Any], name: str) -> None:
+    def _validate_answer(question: Any, answer: JsonObject, name: str) -> None:
         if isinstance(question, NoulQuestion):
             value = answer.get("noul")
             if (
@@ -258,8 +258,13 @@ class NativeSystemOneHTTPRuntime(DecisionRuntime):
             for value in values
         ):
             raise RuntimeErrorBase(f"native server returned invalid probabilities for {name!r}")
-        if not math.isclose(sum(float(value) for value in values), 1.0, rel_tol=1e-5, abs_tol=1e-5):
+        total = sum(float(value) for value in values)
+        # A native server rounding each label to four decimals can shift the
+        # total by at most half a rounding unit per label.
+        rounding_tolerance = max(1e-5, len(values) * 5e-5 + 1e-8)
+        if total <= 0.0 or abs(total - 1.0) > rounding_tolerance:
             raise RuntimeErrorBase(f"native server probabilities do not sum to one for {name!r}")
+        answer["probabilities"] = {key: float(probabilities[key]) / total for key in expected}
 
 
 class SystemOneOpenHTTPRuntime(NativeSystemOneHTTPRuntime):
