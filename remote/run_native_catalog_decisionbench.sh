@@ -134,7 +134,7 @@ start_native_server() {
       mkdir -p /opt/dgemma
       cp "$native_root/djev-thinking/server/structured_server.py" "$native_root/djev-thinking/server/playground.html" "$native_root/djev-thinking/server/walk.html" "$native_root/djev-thinking/server/cube.html" /opt/dgemma/
       hf download nvidia/diffusiongemma-26B-A4B-it-NVFP4 --revision ec4ff3df205028f4e81c954c2227f9312b3ec2ea --local-dir /workflow/models/djev-thinking
-      start_process native env MODEL=/workflow/models/djev-thinking SERVED_NAME=djev-thinking CANVAS=64 MAX_SEQS=8 MAX_MODEL_LEN=4096 GPU_UTIL=0.80 STRUCTURED_PORT=8011 EXTRA_ARGS="--async-scheduling --kv-cache-dtype bfloat16" "$native_root/djev-thinking/entrypoint.sh"
+      start_process native env MODEL=/workflow/models/djev-thinking SERVED_NAME=djev-thinking CANVAS=64 MAX_SEQS=2 MAX_MODEL_LEN=32768 GPU_UTIL=0.85 STRUCTURED_PORT=8011 EXTRA_ARGS="--async-scheduling --kv-cache-dtype bfloat16" "$native_root/djev-thinking/entrypoint.sh"
       native_pid=$started_pid
       wait_for_http native "$native_pid" http://127.0.0.1:8011/health
       ;;
@@ -207,14 +207,18 @@ run_probe() {
     return 1
   fi
   jq -e '.answers.on.type == "noul" and (.answers.on.noul | type == "number")' /workflow/probe-response.json >/dev/null
-  if [[ "$MODEL_KEY" == openjev-thinking || "$MODEL_KEY" == openjev-razorback16 ]]; then
+  if [[ "$MODEL_KEY" == openjev-thinking || "$MODEL_KEY" == openjev-razorback16 || "$MODEL_KEY" == djev-thinking ]]; then
+    local wide_count=255
+    if [[ "$MODEL_KEY" == djev-thinking ]]; then
+      wide_count=27
+    fi
     local wide_status
-    wide_status="$(jq -nc --arg model "$MODEL_KEY" '{model:$model,state:"Choose the final option.",questions:{many:{type:"choice",instructions:"Choose one.",criteria:(reduce range(0;255) as $i ({}; .["c"+($i|tostring)]="Option "+($i|tostring)))}}}' |
+    wide_status="$(jq -nc --arg model "$MODEL_KEY" --argjson count "$wide_count" '{model:$model,state:"Choose the final option.",questions:{many:{type:"choice",instructions:"Choose one.",criteria:(reduce range(0;$count) as $i ({}; .["c"+($i|tostring)]="Option "+($i|tostring)))}}}' |
       curl -sS -o /workflow/probe-wide-response.json -w '%{http_code}' "http://127.0.0.1:${compat_port}/v1/systemone" -H 'Content-Type: application/json' -d @-)" || {
         echo "NATIVE_CATALOG_PROBE_WIDE_TRANSPORT_FAILED model=$MODEL_KEY" >&2
         return 1
       }
-    if [[ "$wide_status" != 200 ]] || ! jq -e '.answers.many.type == "choice" and (.answers.many.probabilities | length) == 255' /workflow/probe-wide-response.json >/dev/null; then
+    if [[ "$wide_status" != 200 ]] || ! jq -e --argjson count "$wide_count" '.answers.many.type == "choice" and (.answers.many.probabilities | length) == $count' /workflow/probe-wide-response.json >/dev/null; then
       local detail
       detail="$(jq -r '(.detail // .error // "invalid-probabilities") | tostring | .[0:400]' /workflow/probe-wide-response.json 2>/dev/null || echo invalid-response)"
       echo "NATIVE_CATALOG_PROBE_WIDE_FAILED model=$MODEL_KEY status=$wide_status detail=$detail" >&2

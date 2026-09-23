@@ -213,6 +213,65 @@ def test_djev_clamps_only_model_facing_criterion_descriptions() -> None:
     assert request.questions["severity"].criteria[0] == "z" * 501
 
 
+def test_djev_thinking_recombines_wide_choices_through_shared_anchor() -> None:
+    calls: list[list[str]] = []
+
+    def post(_: str, body: dict[str, Any], __: float) -> dict[str, Any]:
+        answers: dict[str, Any] = {}
+        for name, question in body["questions"].items():
+            if question["type"] == "noul":
+                answers[name] = {"type": "noul", "noul": 0.5}
+                continue
+            keys = list(question["criteria"])
+            calls.append(keys)
+            assert len(keys) <= 26
+            weights = {key: int(key[1:]) + 1 for key in keys}
+            total = sum(weights.values())
+            probabilities = {key: value / total for key, value in weights.items()}
+            winner = max(keys, key=probabilities.__getitem__)
+            answers[name] = {
+                "type": "choice",
+                "choice": winner,
+                "probabilities": probabilities,
+                "confidence": probabilities[winner],
+            }
+        return {"answers": answers, "usage": {"input_tokens": 1, "output_tokens": 0}}
+
+    request = DecisionRequest.model_validate(
+        {
+            "state": "A frozen example",
+            "questions": {
+                "wide": {
+                    "type": "choice",
+                    "instructions": "Choose one.",
+                    "criteria": {f"c{i}": f"Option {i}" for i in range(55)},
+                },
+                "yes": {"type": "noul", "instructions": "Is it yes?"},
+            },
+        }
+    )
+    runtime = DjevThinkingRuntime(
+        "djev-thinking",
+        config={
+            "decision": {
+                "endpoint": "http://djev-thinking:8011/v1/systemone",
+                "request_fields": {"think": 0},
+            }
+        },
+        post_json=post,
+    )
+
+    response = runtime.decide(request)
+
+    assert [len(keys) for keys in calls] == [26, 26, 5]
+    assert all(keys[0] == "c0" for keys in calls)
+    assert response.answers["wide"].choice == "c54"
+    assert response.answers["wide"].probabilities["c54"] == pytest.approx(55 / sum(range(1, 56)))
+    assert response.answers["yes"].noul == 0.5
+    assert response.usage.input_tokens == 4
+    assert len(request.questions["wide"].criteria) == 55
+
+
 def test_djev_thinking_forwards_its_published_thought_budget() -> None:
     captured: dict[str, Any] = {}
 

@@ -16,6 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .protocol import (
+    ChoiceAnswer,
     ChoiceQuestion,
     DecisionRequest,
     DecisionResponse,
@@ -302,6 +303,74 @@ class DjevThinkingRuntime(NativeSystemOneHTTPRuntime):
             or not 0 <= think <= 4096
         ):
             raise RuntimeErrorBase("DJeV think must be an integer from 0 through 4096")
+
+    def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
+        return [self._decide_one(request) for request in requests]
+
+    def _decide_one(self, request: DecisionRequest) -> DecisionResponse:
+        wide = {
+            name: question
+            for name, question in request.questions.items()
+            if isinstance(question, ChoiceQuestion) and len(question.criteria) > 26
+        }
+        if not wide:
+            return super().decide_batch([request])[0]
+
+        answers: JsonObject = {}
+        input_tokens = 0
+        output_tokens = 0
+        ordinary = {name: question for name, question in request.questions.items() if name not in wide}
+        if ordinary:
+            ordinary_request = request.model_copy(update={"questions": ordinary})
+            reply = super().decide_batch([ordinary_request])[0]
+            answers.update(reply.model_dump(mode="json")["answers"])
+            input_tokens += reply.usage.input_tokens
+            output_tokens += reply.usage.output_tokens
+
+        for name, question in wide.items():
+            keys = list(question.criteria)
+            anchor = keys[0]
+            # Native Spark exposes only A-Z branches.  Overlap every subset on
+            # one anchor and compare conditional odds; this is an adapter
+            # approximation, not a single native 255-way probability read.
+            log_weights = {anchor: 0.0}
+            for offset in range(1, len(keys), 25):
+                chunk_keys = [anchor, *keys[offset : offset + 25]]
+                chunk_question = question.model_copy(
+                    update={"criteria": {key: question.criteria[key] for key in chunk_keys}}
+                )
+                chunk_request = request.model_copy(update={"questions": {name: chunk_question}})
+                reply = super().decide_batch([chunk_request])[0]
+                answer = reply.answers[name]
+                if not isinstance(answer, ChoiceAnswer):
+                    raise RuntimeErrorBase("DJeV thinking returned a non-choice chunk answer")
+                input_tokens += reply.usage.input_tokens
+                output_tokens += reply.usage.output_tokens
+                anchor_probability = max(answer.probabilities[anchor], 1e-12)
+                for key in chunk_keys[1:]:
+                    log_weights[key] = math.log(max(answer.probabilities[key], 1e-12)) - math.log(
+                        anchor_probability
+                    )
+
+            shift = max(log_weights.values())
+            weights = {key: math.exp(log_weights[key] - shift) for key in keys}
+            total = sum(weights.values())
+            probabilities = {key: weights[key] / total for key in keys}
+            winner = max(keys, key=probabilities.__getitem__)
+            answers[name] = {
+                "type": "choice",
+                "choice": winner,
+                "probabilities": probabilities,
+                "confidence": probabilities[winner],
+            }
+
+        return DecisionResponse.model_validate(
+            {
+                "model": self.model_name,
+                "answers": answers,
+                "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+            }
+        )
 
 
 class OpenJevThinkingHTTPRuntime(NativeSystemOneHTTPRuntime):
