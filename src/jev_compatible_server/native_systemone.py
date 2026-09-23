@@ -96,6 +96,9 @@ class NativeSystemOneHTTPRuntime(DecisionRuntime):
 
     def _body(self, request: DecisionRequest) -> JsonObject:
         body = request.model_dump(mode="json")
+        for question in body["questions"].values():
+            if question.get("type") == "noul" and question.get("criteria") is None:
+                question.pop("criteria")
         body["model"] = self.native_model
         for key, value in self.request_fields.items():
             if key in {"state", "questions", "model"}:

@@ -191,6 +191,7 @@ def test_djev_uses_its_distinct_request_shape_and_options() -> None:
     assert captured["model"] == "djev"
     assert captured["options"]["score_mode"] == "independent_levels"
     assert "isolation" not in captured
+    assert "criteria" not in captured["questions"]["urgent"]
 
 
 def test_djev_clamps_only_model_facing_criterion_descriptions() -> None:
