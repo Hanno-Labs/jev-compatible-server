@@ -281,6 +281,12 @@ class ConfiguredCustomHeadBackend(DecisionRuntime):
         input_config = _mapping(self.metadata["input"], "decision.input")
         _template(input_config.get("template"), "decision.input.template")
         self._max_length = self._positive_int(input_config.get("max_length"), "decision.input.max_length")
+        self._truncate_overlong = input_config.get("truncate_overlong", False)
+        if not isinstance(self._truncate_overlong, bool):
+            raise RuntimeErrorBase("decision.input.truncate_overlong must be a boolean")
+        if self._truncate_overlong:
+            # Candidate/question text is at the end of the rendered prompt.
+            self._tokenizer.truncation_side = "left"
         self._batch_size = self._positive_int(self.metadata.get("batch_size", 8), "decision.batch_size")
         chat = _mapping(input_config.get("chat_template", {}), "decision.input.chat_template")
         self._add_generation_prompt = chat.get("add_generation_prompt", True)
@@ -426,7 +432,13 @@ class ConfiguredCustomHeadBackend(DecisionRuntime):
         for start in range(0, len(texts), self._batch_size):
             messages = list(texts[start : start + self._batch_size])
             rendered = [self._tokenizer.apply_chat_template([{"role": "user", "content": text}], tokenize=False, add_generation_prompt=self._add_generation_prompt, enable_thinking=self._enable_thinking) for text in messages]
-            encoded = self._tokenizer(rendered, return_tensors="pt", padding=True, truncation=False)
+            encoded = self._tokenizer(
+                rendered,
+                return_tensors="pt",
+                padding=True,
+                truncation=self._truncate_overlong,
+                max_length=self._max_length if self._truncate_overlong else None,
+            )
             mask = encoded.get("attention_mask")
             if mask is None:
                 raise RuntimeErrorBase("tokenizer output has no attention_mask")

@@ -1,9 +1,10 @@
 import math
+from types import SimpleNamespace
 
 import pytest
-
 from jev_compatible_server.backends import PointerTransformersBackend
 from jev_compatible_server.custom_heads import (
+    ConfiguredCustomHeadBackend,
     build_smalljev_semantic_ids,
     calibration_temperature,
     compile_openjev_tasks,
@@ -29,6 +30,48 @@ def test_openjev_metadata_requires_declared_artifact_contract() -> None:
     )
 
     assert metadata["readout"] == "openjev_scalar_head"
+
+
+def test_custom_head_overlong_tokenization_keeps_candidate_tail() -> None:
+    torch = pytest.importorskip("torch")
+
+    class Tokenizer:
+        truncation_side = "left"
+
+        def apply_chat_template(self, messages: list[dict[str, str]], **_: object) -> str:
+            return messages[0]["content"]
+
+        def __call__(self, texts: list[str], **kwargs: object) -> dict[str, object]:
+            assert kwargs["truncation"] is True
+            assert kwargs["max_length"] == 8
+            assert self.truncation_side == "left"
+            rows = [[ord(char) for char in text][-8:] for text in texts]
+            return {
+                "input_ids": torch.tensor(rows),
+                "attention_mask": torch.ones((len(rows), 8), dtype=torch.long),
+            }
+
+    class Model:
+        def __call__(self, **kwargs: object) -> object:
+            ids = kwargs["input_ids"]
+            return SimpleNamespace(last_hidden_state=ids.float().unsqueeze(-1))
+
+    backend = object.__new__(ConfiguredCustomHeadBackend)
+    backend._torch = torch
+    backend._tokenizer = Tokenizer()
+    backend._batch_size = 2
+    backend._max_length = 8
+    backend._truncate_overlong = True
+    backend._add_generation_prompt = True
+    backend._enable_thinking = False
+    backend._device = "cpu"
+    backend._model = Model()
+    backend._apply_head = lambda hidden: hidden[:, 0]
+
+    scores, counts = backend._score_texts(["old context ANSWER!"])
+
+    assert scores == [float(ord("!"))]
+    assert counts == [8]
 
 
 def test_pointer_batches_bound_padding_and_dense_mask_without_losing_rows() -> None:

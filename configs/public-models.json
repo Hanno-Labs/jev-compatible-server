@@ -874,6 +874,7 @@
           "input": {
             "template": "{query}\n{instructions}\n{candidate}",
             "max_length": 4096,
+            "truncate_overlong": true,
             "chat_template": {
               "add_generation_prompt": true,
               "enable_thinking": false
