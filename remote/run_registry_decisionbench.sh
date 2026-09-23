@@ -29,6 +29,12 @@ fi
 
 uv sync --directory "$source_root" --extra hf
 uv pip install --python "$source_root/.venv/bin/python" "$server_root[transformers]"
+if [[ "${JEV_LOCAL_OPTIMIZED:-0}" == "1" ]]; then
+  uv pip install --python "$source_root/.venv/bin/python" \
+    'flash-linear-attention[cuda]==0.5.2' \
+    'causal-conv1d @ https://github.com/Dao-AILab/causal-conv1d/releases/download/v1.7.0/causal_conv1d-1.7.0%2Bcu12torch2.8cxx11abiTRUE-cp312-cp312-linux_x86_64.whl'
+  echo "DECISION_BENCH_JEV_LOCAL_KERNEL optimized=1" >&2
+fi
 if [[ "${DECISION_NATIVE_EOS:-0}" == "1" ]]; then
   uv pip install --python "$source_root/.venv/bin/python" \
     'torch==2.9.1' 'transformers==5.17.0' 'flash-linear-attention==0.5.2'

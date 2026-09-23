@@ -1,9 +1,12 @@
+from types import SimpleNamespace
+
 import pytest
 
 from jev_compatible_server.jev_local_options import (
     DEFAULT_MODEL,
     DEFAULT_MODEL_REVISION,
     UPSTREAM_SOURCE_REVISION,
+    JevLocalOptionsBackend,
     answer_from_mean_logprobabilities,
     render_prefix,
 )
@@ -103,3 +106,52 @@ def test_choice_score_and_noul_keep_native_distributions() -> None:
     )
     assert isinstance(noul, NoulAnswer)
     assert noul.noul == pytest.approx(0.9820137900379085)
+
+
+def test_candidate_batch_preserves_native_token_logprobabilities() -> None:
+    torch = pytest.importorskip("torch")
+
+    class Tokenizer:
+        pad_token_id = 0
+        eos_token_id = 0
+
+        def __call__(self, value: str, *, return_tensors: str) -> SimpleNamespace:
+            assert return_tensors == "pt"
+            ids = [1, *(ord(character) % 50 + 2 for character in value)]
+            tokens = torch.tensor([ids], dtype=torch.long)
+            return SimpleNamespace(input_ids=tokens, attention_mask=torch.ones_like(tokens))
+
+    class Model:
+        device = torch.device("cpu")
+        calls = 0
+
+        def __call__(self, tokens: object, *, attention_mask: object) -> SimpleNamespace:
+            assert attention_mask is not None
+            self.calls += 1
+            vocabulary = torch.arange(64, dtype=torch.float32)
+            logits = ((tokens.unsqueeze(-1) + 1) * (vocabulary + 1)) / 100
+            return SimpleNamespace(logits=logits)
+
+    tokenizer = Tokenizer()
+    model = Model()
+    backend = JevLocalOptionsBackend.__new__(JevLocalOptionsBackend)
+    backend._torch = torch
+    backend._tokenizer = tokenizer
+    backend._model = model
+    candidates = ["a", "bb", "ccc", "dddd", "eeeee"]
+    actual = backend._candidate_means("prefix:", candidates)
+    assert model.calls == 2
+
+    expected = []
+    for candidate in candidates:
+        encoded = tokenizer("prefix: " + candidate, return_tensors="pt")
+        ids = encoded.input_ids
+        logits = model(ids, attention_mask=encoded.attention_mask).logits[0]
+        common = len(tokenizer("prefix:", return_tensors="pt").input_ids[0])
+        log_probabilities = torch.log_softmax(logits, dim=-1)
+        terms = [
+            log_probabilities[index - 1, ids[0, index]].item()
+            for index in range(common, ids.shape[1])
+        ]
+        expected.append(sum(terms) / len(terms))
+    assert actual == pytest.approx(expected, abs=1e-6)
