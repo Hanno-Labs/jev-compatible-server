@@ -117,6 +117,11 @@ if [[ "$run_mode" == probe ]]; then
       curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-eleven-response.json
     jq -e '.answers.many.type == "choice" and (.answers.many.probabilities | length == 11)' /workflow/probe-eleven-response.json >/dev/null
   fi
+  if [[ "$MODEL_KEY" == open-jev-zefan-2b ]]; then
+    jq -nc '{model:"open-jev-zefan-2b",state:([range(0;6000)|tostring] | join(" ")),questions:{picked:{type:"choice",instructions:"Choose one.",criteria:{yes:"The light is on",no:"The light is off"}}}}' |
+      curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-overlong-response.json
+    jq -e '.answers.picked.type == "choice" and (.answers.picked.probabilities | length == 2)' /workflow/probe-overlong-response.json >/dev/null
+  fi
   if [[ "$MODEL_KEY" == qwen3.8-27b || "$MODEL_KEY" == jqv || "$MODEL_KEY" == litjev || "$MODEL_KEY" == reflex-4b || "$MODEL_KEY" == reflex-27b || "$MODEL_KEY" == decider-2b || "$MODEL_KEY" == decider-35b-a3b ]]; then
     jq -nc '{model:"qwen3.8-27b",state:"The light is on.",questions:{many:{type:"choice",instructions:"Choose the matching option.",criteria:(reduce range(27) as $i ({}; . + {("c"+($i|tostring)):("candidate "+($i|tostring))}))}}}' |
       curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-twenty-seven-response.json
