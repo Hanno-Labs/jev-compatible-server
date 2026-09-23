@@ -92,7 +92,7 @@ install_compat_server() {
 }
 
 start_compat_server() {
-  start_process compat /workflow/compat-venv/bin/python -m uvicorn jev_compatible_server.app:create_app --factory --host 127.0.0.1 --port "$compat_port"
+  start_process compat /workflow/compat-venv/bin/python -m uvicorn jev_compatible_server.app:create_app --factory --host 127.0.0.1 --port "$compat_port" --workers "${COMPAT_WORKERS:-1}"
   compat_pid=$started_pid
   wait_for_http compat "$compat_pid" "http://127.0.0.1:${compat_port}/health"
 }
