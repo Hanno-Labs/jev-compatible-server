@@ -66,7 +66,9 @@ class NativeSystemOneHTTPRuntime(DecisionRuntime):
     Required config: ``decision.endpoint``.  ``decision.native_model`` selects
     the server-side alias, ``decision.request_fields`` supplies documented
     request extensions (for example OpenJev's ``think``), and
-    ``decision.timeout_seconds`` bounds each native read.
+    ``decision.timeout_seconds`` bounds each native read. Optional
+    ``decision.choice_group_limit`` extends a native Choice cap with
+    anchored subset calls; their recombined odds are an approximation.
     """
 
     def __init__(
@@ -89,11 +91,19 @@ class NativeSystemOneHTTPRuntime(DecisionRuntime):
         timeout = _decision_value(self.config, "timeout_seconds", 120.0)
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
             raise RuntimeErrorBase("decision.timeout_seconds must be a positive number")
+        choice_group_limit = _decision_value(self.config, "choice_group_limit")
+        if choice_group_limit is not None and (
+            isinstance(choice_group_limit, bool)
+            or not isinstance(choice_group_limit, int)
+            or not 2 <= choice_group_limit <= 255
+        ):
+            raise RuntimeErrorBase("decision.choice_group_limit must be an integer from 2 through 255")
         self.model_name = str(_decision_value(self.config, "public_model_name", model_id))
         self.endpoint = endpoint
         self.native_model = native_model
         self.request_fields = dict(fields)
         self.timeout_seconds = float(timeout)
+        self.choice_group_limit = choice_group_limit
         self._post_json = post_json or _post_json
 
     def _body(self, request: DecisionRequest) -> JsonObject:
@@ -111,13 +121,78 @@ class NativeSystemOneHTTPRuntime(DecisionRuntime):
         return body
 
     def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
-        return [
-            self._decode(
-                request,
-                self._post_json(self.endpoint, self._body(request), self.timeout_seconds),
-            )
-            for request in requests
-        ]
+        return [self._decide_with_choice_limit(request) for request in requests]
+
+    def _direct_one(self, request: DecisionRequest) -> DecisionResponse:
+        return self._decode(
+            request,
+            self._post_json(self.endpoint, self._body(request), self.timeout_seconds),
+        )
+
+    def _decide_with_choice_limit(self, request: DecisionRequest) -> DecisionResponse:
+        limit = self.choice_group_limit
+        if limit is None:
+            return self._direct_one(request)
+        wide = {
+            name: question
+            for name, question in request.questions.items()
+            if isinstance(question, ChoiceQuestion) and len(question.criteria) > limit
+        }
+        if not wide:
+            return self._direct_one(request)
+
+        answers: JsonObject = {}
+        input_tokens = 0
+        output_tokens = 0
+        ordinary = {name: question for name, question in request.questions.items() if name not in wide}
+        if ordinary:
+            reply = self._direct_one(request.model_copy(update={"questions": ordinary}))
+            answers.update(reply.model_dump(mode="json")["answers"])
+            input_tokens += reply.usage.input_tokens
+            output_tokens += reply.usage.output_tokens
+
+        for name, question in wide.items():
+            keys = list(question.criteria)
+            anchor = keys[0]
+            log_weights = {anchor: 0.0}
+            # Native subset probabilities share an anchor. Their global
+            # conditional-odds reconstruction is an adapter approximation.
+            for offset in range(1, len(keys), limit - 1):
+                chunk_keys = [anchor, *keys[offset : offset + limit - 1]]
+                chunk_question = question.model_copy(
+                    update={"criteria": {key: question.criteria[key] for key in chunk_keys}}
+                )
+                chunk_request = request.model_copy(update={"questions": {name: chunk_question}})
+                reply = self._direct_one(chunk_request)
+                answer = reply.answers[name]
+                if not isinstance(answer, ChoiceAnswer):
+                    raise RuntimeErrorBase("native server returned a non-choice chunk answer")
+                input_tokens += reply.usage.input_tokens
+                output_tokens += reply.usage.output_tokens
+                anchor_probability = max(answer.probabilities[anchor], 1e-12)
+                for key in chunk_keys[1:]:
+                    log_weights[key] = math.log(max(answer.probabilities[key], 1e-12)) - math.log(
+                        anchor_probability
+                    )
+            shift = max(log_weights.values())
+            weights = {key: math.exp(log_weights[key] - shift) for key in keys}
+            total = sum(weights.values())
+            probabilities = {key: weights[key] / total for key in keys}
+            winner = max(keys, key=probabilities.__getitem__)
+            answers[name] = {
+                "type": "choice",
+                "choice": winner,
+                "probabilities": probabilities,
+                "confidence": probabilities[winner],
+            }
+
+        return DecisionResponse.model_validate(
+            {
+                "model": self.model_name,
+                "answers": answers,
+                "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+            }
+        )
 
     def _decode(self, request: DecisionRequest, raw: JsonObject) -> DecisionResponse:
         raw_answers = raw.get("answers")

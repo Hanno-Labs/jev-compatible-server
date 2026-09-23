@@ -989,6 +989,7 @@
           "native_model": "Qwen/Qwen3.6-35B-A3B",
           "public_model_name": "openjev-sglang",
           "timeout_seconds": 120,
+          "choice_group_limit": 64,
           "weights": {
             "repo": "nvidia/Qwen3.6-35B-A3B-NVFP4",
             "revision": "1355db6a052410cfd62085d94b58866fd0f2c3c5"
@@ -1282,22 +1283,6 @@
             "repo": "https://github.com/EldanRing/winnow-inference",
             "revision": "47ad31a338ebe2209e546b999c31f94853ddb75d"
           }
-        }
-      }
-    },
-    "decision-1.0-eos-0.8b": {
-      "backend": "transformers",
-      "model": "llm-semantic-router/Decision-1.0-Eos-0.8B",
-      "description": "Decision 1.0 Eos native typed decision head",
-      "support_status": "pending",
-      "enabled": true,
-      "config": {
-        "decision": {
-          "readout": "decision_native",
-          "revision": "3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd",
-          "public_model_name": "decision-1.0-eos-0.8b",
-          "batch_size": 8,
-          "max_length": 16384
         }
       }
     },

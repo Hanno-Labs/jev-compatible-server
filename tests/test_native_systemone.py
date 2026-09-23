@@ -69,6 +69,7 @@ def test_native_systemone_preserves_native_typed_distribution() -> None:
                 "endpoint": "http://native:8091/v1/systemone",
                 "native_model": "winnow-latest",
                 "request_fields": {"think": 32},
+                "choice_group_limit": 64,
             }
         },
         post_json=post,
@@ -82,6 +83,62 @@ def test_native_systemone_preserves_native_typed_distribution() -> None:
     answer_payload = response.model_dump(mode="json")["answers"]
     assert answer_payload["route"]["probabilities"] == {"cash": 0.2, "card": 0.8}
     assert answer_payload["severity"]["legend"] == ["low", "high"]
+
+
+def test_native_systemone_groups_only_choices_above_configured_cap() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def post(_: str, body: dict[str, Any], __: float) -> dict[str, Any]:
+        questions = body["questions"]
+        calls.append(questions)
+        if "urgent" in questions:
+            assert list(questions) == ["urgent"]
+            return {"answers": {"urgent": {"type": "noul", "noul": 0.6}}}
+        keys = list(questions["pick"]["criteria"])
+        assert len(keys) <= 64
+        values = {key: int(key[1:]) + 1 for key in keys}
+        total = sum(values.values())
+        probabilities = {key: value / total for key, value in values.items()}
+        winner = max(keys, key=probabilities.__getitem__)
+        return {
+            "answers": {
+                "pick": {
+                    "type": "choice",
+                    "choice": winner,
+                    "probabilities": probabilities,
+                    "confidence": probabilities[winner],
+                }
+            }
+        }
+
+    request = DecisionRequest.model_validate(
+        {
+            "state": "frozen",
+            "questions": {
+                "urgent": {"type": "noul", "instructions": "Is this urgent?"},
+                "pick": {
+                    "type": "choice",
+                    "instructions": "Choose one.",
+                    "criteria": {f"c{i}": f"Option {i}" for i in range(128)},
+                },
+            },
+        }
+    )
+    runtime = NativeSystemOneHTTPRuntime(
+        "openjev-sglang",
+        config={"decision": {"endpoint": "http://native/v1/systemone", "choice_group_limit": 64}},
+        post_json=post,
+    )
+
+    response = runtime.decide(request)
+
+    assert [len(list(questions.get("pick", {}).get("criteria", {}))) for questions in calls] == [0, 64, 64, 2]
+    assert all(next(iter(questions["pick"]["criteria"])) == "c0" for questions in calls[1:])
+    assert response.answers["urgent"].noul == 0.6
+    assert response.answers["pick"].choice == "c127"
+    assert len(response.answers["pick"].probabilities) == 128
+    assert sum(response.answers["pick"].probabilities.values()) == pytest.approx(1.0)
+    assert response.answers["pick"].probabilities["c127"] == pytest.approx(128 / sum(range(1, 129)))
 
 
 def test_native_systemone_rejects_misaligned_distribution() -> None:
