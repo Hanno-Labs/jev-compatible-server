@@ -5,6 +5,8 @@ import pytest
 from jev_compatible_server.backends import PointerTransformersBackend
 from jev_compatible_server.custom_heads import (
     ConfiguredCustomHeadBackend,
+    SmallJevSemanticBackend,
+    build_smalljev_aux_head,
     build_smalljev_semantic_ids,
     calibration_temperature,
     compile_openjev_tasks,
@@ -14,7 +16,7 @@ from jev_compatible_server.custom_heads import (
 )
 from jev_compatible_server.encoder_decoder import MarginTask
 from jev_compatible_server.protocol import DecisionRequest
-from jev_compatible_server.runtime import RuntimeErrorBase
+from jev_compatible_server.runtime import RuntimeErrorBase, softmax
 
 
 def test_openjev_metadata_requires_declared_artifact_contract() -> None:
@@ -207,3 +209,79 @@ def test_smalljev_semantic_builder_uses_public_1024_limit_and_state_trim() -> No
 def test_smalljev_semantic_builder_rejects_more_than_letter_verbalizers() -> None:
     with pytest.raises(RuntimeErrorBase, match="at most 26"):
         build_smalljev_semantic_ids(_FakeTokenizer(), "s", "q", [str(i) for i in range(27)])
+
+
+def test_smalljev_pinned_aux_head_requires_exact_tensor_shapes() -> None:
+    torch = pytest.importorskip("torch")
+    payload = {
+        "noul": {
+            "bit.weight": torch.zeros((1, 4)),
+            "bit.bias": torch.zeros(1),
+        }
+    }
+    head = build_smalljev_aux_head(
+        torch, payload, name="noul", prefix="bit", hidden_size=4, outputs=1, device="cpu"
+    )
+    assert torch.sigmoid(head(torch.ones(4))).item() == 0.5
+    payload["noul"]["bit.weight"] = torch.zeros((2, 4))
+    with pytest.raises(RuntimeErrorBase, match="invalid shape"):
+        build_smalljev_aux_head(
+            torch, payload, name="noul", prefix="bit", hidden_size=4, outputs=1, device="cpu"
+        )
+
+
+def test_smalljev_semantic_backend_uses_all_three_published_heads() -> None:
+    torch = pytest.importorskip("torch")
+
+    class Model:
+        def __call__(self, *, input_ids: object, **_: object) -> object:
+            return SimpleNamespace(
+                hidden_states=(torch.ones((1, input_ids.shape[1], 4)),)
+            )
+
+    backend = object.__new__(SmallJevSemanticBackend)
+    backend.model_name = "smalljev"
+    backend._torch = torch
+    backend._tokenizer = _FakeTokenizer()
+    backend._model = Model()
+    backend._device = "cpu"
+    backend._max_length = 1024
+    backend._head = torch.nn.Linear(4, 1)
+    backend._noul_head = torch.nn.Linear(4, 1)
+    backend._score_head = torch.nn.Linear(4, 8)
+    with torch.no_grad():
+        backend._head.weight.zero_()
+        backend._head.bias.zero_()
+        backend._noul_head.weight.zero_()
+        backend._noul_head.bias.zero_()
+        backend._score_head.weight.zero_()
+        backend._score_head.bias.copy_(torch.arange(8, dtype=torch.float32))
+    request = DecisionRequest.model_validate(
+        {
+            "state": "state",
+            "questions": {
+                "choice": {
+                    "type": "choice",
+                    "instructions": "Choose.",
+                    "criteria": {f"c{i}": f"Option {i}" for i in range(27)},
+                },
+                "binary": {"type": "noul", "instructions": "Yes?"},
+                "ordinal": {
+                    "type": "score",
+                    "instructions": "Rate it.",
+                    "criteria": ["low", "medium", "high"],
+                },
+            },
+        }
+    )
+
+    response = backend.decide(request)
+
+    assert len(response.answers["choice"].probabilities) == 27
+    assert response.answers["choice"].probabilities["c26"] == pytest.approx(1 / 27)
+    assert response.answers["binary"].noul == 0.5
+    assert list(response.answers["ordinal"].probabilities) == ["0", "1", "2"]
+    assert response.answers["ordinal"].score == pytest.approx(
+        sum(index * probability for index, probability in enumerate(softmax([0.0, 1.0, 2.0])))
+    )
+    assert response.usage.input_tokens > 0

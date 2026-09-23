@@ -549,15 +549,32 @@ def build_smalljev_semantic_ids(
     return input_ids, spans
 
 
-class SmallJevSemanticBackend(DecisionRuntime):
-    """Faithful published SmallJev semantic-v9 Choice scorer.
+def build_smalljev_aux_head(
+    torch: Any,
+    payload: Mapping[str, Any],
+    *,
+    name: str,
+    prefix: str,
+    hidden_size: int,
+    outputs: int,
+    device: Any,
+) -> Any:
+    """Load one pinned semantic-v9 Noul/Score linear head with exact shapes."""
 
-    The public semantic runtime does not apply a saved calibration artifact and
-    only uses ``OptionScorerHead`` for Choice.  Noul and Score use a separate
-    LM-verbalizer path, so this backend deliberately exposes Choice only.
-    ``QuestionTypeRuntime`` supplies explicit unsupported responses for the
-    remaining wire types when the registry declares that boundary.
-    """
+    state = _mapping(payload.get(name), f"SmallJev {name} head")
+    values: dict[str, Any] = {}
+    for field, shape in (("weight", (outputs, hidden_size)), ("bias", (outputs,))):
+        value = state.get(f"{prefix}.{field}")
+        if not isinstance(value, torch.Tensor) or tuple(value.shape) != shape:
+            raise RuntimeErrorBase(f"SmallJev {name} {prefix}.{field} has invalid shape")
+        values[field] = value
+    layer = torch.nn.Linear(hidden_size, outputs)
+    layer.load_state_dict(values, strict=True)
+    return layer.to(device).eval()
+
+
+class SmallJevSemanticBackend(DecisionRuntime):
+    """Pinned semantic-v9 Choice, Noul, and Score readouts."""
 
     def __init__(
         self,
@@ -654,6 +671,25 @@ class SmallJevSemanticBackend(DecisionRuntime):
         except RuntimeError as exc:
             raise RuntimeErrorBase("SmallJev OptionScorerHead state is incompatible") from exc
         self._head.to(self._device).eval()
+        aux = _mapping(artifacts.get("noul_score"), "decision.artifacts.noul_score")
+        aux_repo, aux_file, aux_revision = aux.get("repo"), aux.get("file"), aux.get("revision")
+        if not isinstance(aux_repo, str) or not isinstance(aux_file, str) or not isinstance(aux_revision, str):
+            raise RuntimeErrorBase("SmallJev Noul/Score artifact requires pinned repo, file, revision")
+        aux_blob = torch.load(
+            hf_hub_download(aux_repo, aux_file, revision=aux_revision),
+            map_location="cpu",
+            weights_only=True,
+        )
+        if not isinstance(aux_blob, Mapping) or aux_blob.get("hidden_size") != blob["hidden_size"]:
+            raise RuntimeErrorBase("SmallJev Noul/Score artifact hidden_size is incompatible")
+        self._noul_head = build_smalljev_aux_head(
+            torch, aux_blob, name="noul", prefix="bit",
+            hidden_size=int(blob["hidden_size"]), outputs=1, device=self._device,
+        )
+        self._score_head = build_smalljev_aux_head(
+            torch, aux_blob, name="score", prefix="level",
+            hidden_size=int(blob["hidden_size"]), outputs=8, device=self._device,
+        )
         self._max_length = 1024
 
     def decide_batch(self, requests: Sequence[DecisionRequest]) -> list[DecisionResponse]:
@@ -664,48 +700,74 @@ class SmallJevSemanticBackend(DecisionRuntime):
             input_tokens = 0
             state = _openjev_content(request.state)
             for name, question in request.questions.items():
-                if not isinstance(question, ChoiceQuestion):
-                    raise RuntimeErrorBase(
-                        "SmallJev semantic-v9 faithfully supports Choice only; "
-                        "declare decision.question_types=[\"choice\"]"
+                instructions = _openjev_content(question.instructions)
+                if isinstance(question, ChoiceQuestion):
+                    labels = list(question.criteria)
+                    options = [
+                        key if value is None else f"{key}: {_openjev_content(value)}"
+                        for key, value in question.criteria.items()
+                    ]
+                    all_logits: list[float] = []
+                    for start in range(0, len(options), 26):
+                        ids, spans = build_smalljev_semantic_ids(
+                            self._tokenizer, state, instructions,
+                            options[start : start + 26], max_length=self._max_length,
+                        )
+                        input_tokens += len(ids)
+                        hidden = self._last_hidden(ids)
+                        representations = [
+                            hidden[-1, :] if end <= begin else hidden[begin:end, :].float().mean(0)
+                            for begin, end in spans
+                        ]
+                        with torch.inference_mode():
+                            logits = self._head(torch.stack(representations).float()).squeeze(-1)
+                        if not bool(torch.isfinite(logits).all()):
+                            raise RuntimeErrorBase("SmallJev OptionScorerHead produced non-finite logits")
+                        all_logits.extend(float(value) for value in logits.reshape(-1).cpu().tolist())
+                    # Cross-group logits are an adapter approximation when
+                    # there are more than the checkpoint's 26 letter slots.
+                    probabilities = softmax(all_logits)
+                    distribution = dict(zip(labels, probabilities, strict=True))
+                    answers[name] = ChoiceAnswer(
+                        type="choice",
+                        choice=max(distribution, key=distribution.__getitem__),
+                        probabilities=distribution,
+                        confidence=max(probabilities),
                     )
-                labels = list(question.criteria)
-                options = [
-                    key if value is None else f"{key}: {_openjev_content(value)}"
-                    for key, value in question.criteria.items()
-                ]
-                ids, spans = build_smalljev_semantic_ids(
-                    self._tokenizer,
-                    state,
-                    _openjev_content(question.instructions),
-                    options,
-                    max_length=self._max_length,
-                )
-                input_tokens += len(ids)
-                tensor = torch.tensor([ids], device=self._device)
-                with torch.inference_mode():
-                    output = self._model(
-                        input_ids=tensor,
-                        use_cache=False,
-                        output_hidden_states=True,
+                elif isinstance(question, NoulQuestion):
+                    ids, _ = build_smalljev_semantic_ids(
+                        self._tokenizer, state, instructions, ["yes", "no"],
+                        max_length=self._max_length,
                     )
-                hidden = output.hidden_states[-1][0]
-                representations = [
-                    hidden[-1, :] if end <= start else hidden[start:end, :].float().mean(0)
-                    for start, end in spans
-                ]
-                with torch.inference_mode():
-                    logits = self._head(torch.stack(representations).float()).squeeze(-1)
-                if not bool(torch.isfinite(logits).all()):
-                    raise RuntimeErrorBase("SmallJev OptionScorerHead produced non-finite logits")
-                probabilities = softmax([float(value) for value in logits.cpu().tolist()])
-                distribution = dict(zip(labels, probabilities, strict=True))
-                answers[name] = ChoiceAnswer(
-                    type="choice",
-                    choice=max(distribution, key=distribution.__getitem__),
-                    probabilities=distribution,
-                    confidence=max(probabilities),
-                )
+                    input_tokens += len(ids)
+                    hidden = self._last_hidden(ids)
+                    with torch.inference_mode():
+                        probability = float(torch.sigmoid(self._noul_head(hidden[-1, :].float())).item())
+                    if not math.isfinite(probability):
+                        raise RuntimeErrorBase("SmallJev Noul head produced a non-finite probability")
+                    answers[name] = NoulAnswer(type="noul", noul=probability)
+                elif isinstance(question, ScoreQuestion):
+                    if len(question.criteria) > 8:
+                        raise RuntimeErrorBase("SmallJev Score head supports at most 8 levels")
+                    ids, _ = build_smalljev_semantic_ids(
+                        self._tokenizer, state, instructions,
+                        [_openjev_content(value) for value in question.criteria],
+                        max_length=self._max_length,
+                    )
+                    input_tokens += len(ids)
+                    hidden = self._last_hidden(ids)
+                    with torch.inference_mode():
+                        logits = self._score_head(hidden[-1, :].float())[: len(question.criteria)]
+                    if not bool(torch.isfinite(logits).all()):
+                        raise RuntimeErrorBase("SmallJev Score head produced non-finite logits")
+                    probabilities = softmax([float(value) for value in logits.cpu().tolist()])
+                    answers[name] = ScoreAnswer(
+                        type="score",
+                        score=sum(index * value for index, value in enumerate(probabilities)),
+                        probabilities={str(index): value for index, value in enumerate(probabilities)},
+                        confidence=max(probabilities),
+                        legend=question.criteria,
+                    )
             responses.append(
                 DecisionResponse(
                     model=self.model_name,
@@ -714,3 +776,13 @@ class SmallJevSemanticBackend(DecisionRuntime):
                 )
             )
         return responses
+
+    def _last_hidden(self, ids: list[int]) -> Any:
+        tensor = self._torch.tensor([ids], device=self._device)
+        with self._torch.inference_mode():
+            output = self._model(
+                input_ids=tensor,
+                use_cache=False,
+                output_hidden_states=True,
+            )
+        return output.hidden_states[-1][0]

@@ -1130,7 +1130,7 @@
       "config": {
         "decision": {
           "readout": "semantic_option_head",
-          "question_types": ["choice"],
+          "question_types": ["choice", "score", "noul"],
           "loader": {
             "base_model": "openbmb/MiniCPM5-2B-Base",
             "revision": "96a57cd572a02506b4500f54427dca24970c1bac",
@@ -1146,6 +1146,11 @@
               "repo": "isHeSatoshi/smalljev-semantic-v9",
               "revision": "8e2bac7c4e922371c05899f4f000233e8096fee6",
               "file": "semantic-v9-scorer.pt"
+            },
+            "noul_score": {
+              "repo": "isHeSatoshi/smalljev-semantic-v9",
+              "revision": "8e2bac7c4e922371c05899f4f000233e8096fee6",
+              "file": "semantic-v9-noulscore.pt"
             }
           }
         }
