@@ -132,11 +132,17 @@ if [[ "$run_mode" == probe ]]; then
 fi
 
 if [[ "${DECISION_NATIVE_EOS:-0}" == "1" ]]; then
-  curl -fsS --max-time 180 \
+  probe_response=$(curl -sS --max-time 180 -w '\n%{http_code}' \
     -H 'Content-Type: application/json' \
     -d '{"model":"decision-1.0-eos-0.8b","state":"A customer needs help with a billing issue.","questions":{"route":{"type":"choice","instructions":"Choose the support route.","criteria":{"self":"Self service","human":"Human support"}}}}' \
-    http://127.0.0.1:8000/v1/systemone \
-    | jq -e '.answers.route.type == "choice" and (.answers.route.probabilities | keys == ["human", "self"])' >/dev/null
+    http://127.0.0.1:8000/v1/systemone)
+  probe_status=${probe_response##*$'\n'}
+  probe_body=${probe_response%$'\n'*}
+  if [[ "$probe_status" != "200" ]]; then
+    echo "DECISION_BENCH_NATIVE_PROBE_FAILED status=$probe_status body=$probe_body" >&2
+    exit 1
+  fi
+  jq -e '.answers.route.type == "choice" and (.answers.route.probabilities | keys == ["human", "self"])' <<<"$probe_body" >/dev/null
   echo 'DECISION_BENCH_NATIVE_PROBE_COMPLETE model=decision-1.0-eos-0.8b' >&2
 fi
 

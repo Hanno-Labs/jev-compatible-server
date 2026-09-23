@@ -16,6 +16,22 @@ from .protocol import DecisionRequest, DecisionResponse, Usage
 from .runtime import DecisionRuntime, RuntimeErrorBase
 
 
+def _load_adapter(model: Any, adapter: str, loader: Mapping[str, Any]) -> Any:
+    adapter_revision = loader.get("adapter_revision")
+    if adapter_revision is not None and (
+        not isinstance(adapter_revision, str) or not adapter_revision
+    ):
+        raise RuntimeErrorBase(
+            "decision.loader.adapter_revision must be a nonempty string"
+        )
+    try:
+        from peft import PeftModel
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise RuntimeErrorBase("sequence-classifier adapters require peft") from exc
+    kwargs = {"revision": adapter_revision} if adapter_revision is not None else {}
+    return PeftModel.from_pretrained(model, adapter, **kwargs)
+
+
 class SequenceClassifierMarginBackend(DecisionRuntime):
     """Score each candidate with a scalar sequence-classification head."""
 
@@ -108,11 +124,7 @@ class SequenceClassifierMarginBackend(DecisionRuntime):
         if adapter is not None:
             if not isinstance(adapter, str):
                 raise RuntimeErrorBase("decision.loader.adapter must be a string")
-            try:
-                from peft import PeftModel
-            except ImportError as exc:  # pragma: no cover - optional dependency
-                raise RuntimeErrorBase("sequence-classifier adapters require peft") from exc
-            self._model = PeftModel.from_pretrained(self._model, adapter)
+            self._model = _load_adapter(self._model, adapter, loader)
         self._model.to(target)
         self._model.eval()
         self._device = next(self._model.parameters()).device

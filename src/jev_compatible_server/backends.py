@@ -163,9 +163,15 @@ class PointerTransformersBackend(TokenLogitRuntime):
         load_kwargs: dict[str, Any] = {}
         if torch.cuda.is_available():
             load_kwargs["torch_dtype"] = torch.bfloat16
-        # Pointer models provide a custom 4-D block-causal mask; eager attention
-        # preserves that mask contract across Transformers releases.
-        load_kwargs["attn_implementation"] = "eager"
+        # Pointer models provide a custom 4-D block-causal mask. Keep eager as
+        # the default until a given model has passed SDPA parity validation.
+        attention_impl = self.config.get("decision.attn_implementation", "eager")
+        if attention_impl not in {"eager", "sdpa"}:
+            raise RuntimeErrorBase(
+                "pointer_head decision.attn_implementation must be eager or sdpa"
+            )
+        self._attention_impl = attention_impl
+        load_kwargs["attn_implementation"] = attention_impl
         full_model = AutoModelForCausalLM.from_pretrained(backbone, **load_kwargs)
         self._model = getattr(full_model, "model", full_model)
         adapter = self.config.get("decision.adapter") or self.config.get("adapter")
@@ -284,7 +290,18 @@ class PointerTransformersBackend(TokenLogitRuntime):
         length = max(len(item["ids"]) for item in encodings)
         pad_id = self._tokenizer.pad_token_id or 0
         ids = torch.full((len(encodings), length), pad_id, dtype=torch.long, device=self._device)
-        mask = torch.full((len(encodings), 1, length, length), torch.finfo(torch.float32).min, device=self._device)
+        mask_dtype = (
+            next(self._model.parameters()).dtype
+            if self._attention_impl == "sdpa"
+            else torch.float32
+        )
+        mask_min = torch.finfo(mask_dtype).min
+        mask = torch.full(
+            (len(encodings), 1, length, length),
+            mask_min,
+            dtype=mask_dtype,
+            device=self._device,
+        )
         positions = torch.zeros((len(encodings), length), dtype=torch.long, device=self._device)
         for row, item in enumerate(encodings):
             size = len(item["ids"]); ids[row, :size] = torch.tensor(item["ids"], device=self._device)
@@ -296,7 +313,7 @@ class PointerTransformersBackend(TokenLogitRuntime):
             option_keys = opt[None, :] >= 0
             decide = opt[:, None] == -2
             allowed &= (~option_keys | decide | (opt[None, :] == opt[:, None]))
-            mask[row, 0, :size, :size] = torch.where(allowed, 0.0, torch.finfo(torch.float32).min)
+            mask[row, 0, :size, :size] = torch.where(allowed, 0.0, mask_min)
         with torch.inference_mode():
             return self._model(input_ids=ids, position_ids=positions, attention_mask=mask).last_hidden_state.float()
 

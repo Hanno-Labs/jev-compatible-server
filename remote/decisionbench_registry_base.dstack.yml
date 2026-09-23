@@ -11,6 +11,7 @@ files:
   - ./chunked_results.sh:/workflow/chunked_results.sh
   - ./decision-bench-runtime.tgz:/workflow/decision-bench-runtime.tgz
   - ../pyproject.toml:/workflow/jev-compatible-server/pyproject.toml
+  - ../README.md:/workflow/jev-compatible-server/README.md
   - ../src:/workflow/jev-compatible-server/src
   - ../configs/public-models.json:/workflow/jev-compatible-server/configs/public-models.json
   - ../configs/public-models.json:/workflow/public-models.json

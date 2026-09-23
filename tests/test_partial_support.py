@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 
+import pytest
 from fastapi.testclient import TestClient
 
 from jev_compatible_server.app import create_app
@@ -101,3 +102,27 @@ def test_partial_result_is_returned_over_systemone_http_route() -> None:
         "supported_types": ["noul"],
     }
     assert payload["answers"]["correct"] == {"type": "noul", "noul": 0.75}
+
+
+def test_inference_error_logs_type_and_location_without_request_content(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    class FailingRuntime(DecisionRuntime):
+        model_name = "fake/failing"
+
+        def decide_batch(
+            self, requests: Sequence[DecisionRequest]
+        ) -> list[DecisionResponse]:
+            raise MemoryError("private-input-marker")
+
+    with TestClient(create_app(FailingRuntime())) as client:
+        response = client.post(
+            "/v1/systemone",
+            json=_mixed_request().model_dump(mode="json"),
+        )
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "decision inference failed"
+    assert "exception_type=MemoryError" in caplog.text
+    assert "frames=" in caplog.text
+    assert "private-input-marker" not in caplog.text

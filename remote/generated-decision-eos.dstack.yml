@@ -10,6 +10,7 @@ files:
   - ./run_registry_decisionbench.sh:/workflow/run_registry_decisionbench.sh
   - ./chunked_results.sh:/workflow/chunked_results.sh
   - ../pyproject.toml:/workflow/jev-compatible-server/pyproject.toml
+  - ../README.md:/workflow/jev-compatible-server/README.md
   - ../src:/workflow/jev-compatible-server/src
   - ../configs/public-models.json:/workflow/jev-compatible-server/configs/public-models.json
   - ../configs/public-models.json:/workflow/public-models.json
@@ -28,7 +29,7 @@ retry:
   on_events: [no-capacity, interruption, error]
   duration: 12h
 commands:
-  - apt-get update -qq && apt-get install -y -qq jq curl
+  - apt-get update -qq && apt-get install -y -qq jq curl build-essential
   - pip install -U uv "hf>=1.23" "huggingface_hub>=1.23" hf_xet
   - bash /workflow/run_registry_decisionbench.sh
 resources:

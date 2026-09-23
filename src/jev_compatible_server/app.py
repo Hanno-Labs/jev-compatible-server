@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import traceback
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
@@ -13,6 +15,8 @@ from .batching import DecisionBatcher
 from .protocol import DecisionRequest, DecisionResponse
 from .registry import ModelRegistry, RegistryRuntime, build_transformers_runtime
 from .runtime import DecisionRuntime, RuntimeErrorBase, apply_question_type_support
+
+logger = logging.getLogger(__name__)
 
 
 def _positive_batch_size(value: str) -> int:
@@ -129,6 +133,16 @@ def create_app(
         except RuntimeErrorBase as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except Exception as exc:
+            frames = traceback.extract_tb(exc.__traceback__)[-12:]
+            frame_locations = " > ".join(
+                f"{os.path.basename(frame.filename)}:{frame.lineno}:{frame.name}"
+                for frame in frames
+            )
+            logger.error(
+                "decision inference failed exception_type=%s frames=%s",
+                type(exc).__name__,
+                frame_locations,
+            )
             raise HTTPException(status_code=500, detail="decision inference failed") from exc
 
     return app

@@ -30,6 +30,7 @@ from .runtime import DecisionRuntime, RuntimeErrorBase, softmax
 UPSTREAM_SOURCE_REVISION = "56bfc2a96543f2fc6a4d4227460a2c17553c6e24"
 DEFAULT_MODEL = "Qwen/Qwen3.5-9B"
 DEFAULT_MODEL_REVISION = "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+CANDIDATE_BATCH_SIZE = 8
 
 # The plain-prompt values are the upstream shipped defaults for Qwen3.5-9B.
 DEFAULT_TEMPERATURES: dict[str, float] = {
@@ -268,8 +269,8 @@ class JevLocalOptionsBackend(DecisionRuntime):
             raise RuntimeErrorBase("jev-local tokenizer has no padding token")
         means: list[float] = []
         with self._torch.no_grad():
-            for offset in range(0, len(tokenized), 4):
-                group = tokenized[offset : offset + 4]
+            for offset in range(0, len(tokenized), CANDIDATE_BATCH_SIZE):
+                group = tokenized[offset : offset + CANDIDATE_BATCH_SIZE]
                 max_length = max(len(ids) for ids, _ in group)
                 tokens = self._torch.full(
                     (len(group), max_length),

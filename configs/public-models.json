@@ -207,7 +207,9 @@
         "readout": "sequence_classifier_margin",
         "loader": {
           "base_model": "Qwen/Qwen3.5-4B-Base",
+          "revision": "1001bb4d826a52d1f399e183466143f4da7b741b",
           "adapter": "auto",
+          "adapter_revision": "e6464dce15f013c2ef641593a85cc6afcdaea928",
           "num_labels": 1
         },
         "input": {
@@ -1300,6 +1302,22 @@
             "repo": "https://github.com/EldanRing/winnow-inference",
             "revision": "47ad31a338ebe2209e546b999c31f94853ddb75d"
           }
+        }
+      }
+    },
+    "decision-1.0-eos-0.8b": {
+      "backend": "transformers",
+      "model": "llm-semantic-router/Decision-1.0-Eos-0.8B",
+      "description": "Decision 1.0 Eos native typed decision head",
+      "support_status": "supported",
+      "enabled": true,
+      "config": {
+        "decision": {
+          "readout": "decision_native",
+          "revision": "3c2d632609ceb66f3a13bbc5f77f3ab8cdeebcdd",
+          "public_model_name": "decision-1.0-eos-0.8b",
+          "batch_size": 8,
+          "max_length": 16384
         }
       }
     },

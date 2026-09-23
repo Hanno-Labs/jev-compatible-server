@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from jev_compatible_server.jev_local_options import (
+    CANDIDATE_BATCH_SIZE,
     DEFAULT_MODEL,
     DEFAULT_MODEL_REVISION,
     UPSTREAM_SOURCE_REVISION,
@@ -112,8 +113,8 @@ def test_candidate_batch_preserves_native_token_logprobabilities() -> None:
     torch = pytest.importorskip("torch")
 
     class Tokenizer:
-        pad_token_id = 0
-        eos_token_id = 0
+        pad_token_id = 63
+        eos_token_id = 62
 
         def __call__(self, value: str, *, return_tensors: str) -> SimpleNamespace:
             assert return_tensors == "pt"
@@ -127,6 +128,7 @@ def test_candidate_batch_preserves_native_token_logprobabilities() -> None:
 
         def __call__(self, tokens: object, *, attention_mask: object) -> SimpleNamespace:
             assert attention_mask is not None
+            assert (tokens[attention_mask == 0] == Tokenizer.pad_token_id).all()
             self.calls += 1
             vocabulary = torch.arange(64, dtype=torch.float32)
             logits = ((tokens.unsqueeze(-1) + 1) * (vocabulary + 1)) / 100
@@ -138,9 +140,10 @@ def test_candidate_batch_preserves_native_token_logprobabilities() -> None:
     backend._torch = torch
     backend._tokenizer = tokenizer
     backend._model = model
-    candidates = ["a", "bb", "ccc", "dddd", "eeeee"]
+    candidates = ["A" * (index % 5 + 1) for index in range(17)]
+    assert CANDIDATE_BATCH_SIZE == 8
     actual = backend._candidate_means("prefix:", candidates)
-    assert model.calls == 2
+    assert model.calls == 3
 
     expected = []
     for candidate in candidates:
