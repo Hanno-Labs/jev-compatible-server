@@ -633,9 +633,19 @@
     "certo": {
       "backend": "transformers",
       "model": "altslate/certo-decision-model",
-      "recipe": "sequence-classifier-native-scalar-v1",
-      "description": "Certo decision classifier exposed as candidate scoring",
-      "support_status": "supported"
+      "description": "Certo custom ModernBERT option-query decision head",
+      "support_status": "supported",
+      "config": {
+        "decision": {
+          "readout": "certo_decision",
+          "revision": "7628c0da918c5fce96a6629c548630ac6bed8c58",
+          "backbone_revision": "45bb4654a4d5aaff24dd11d4781fa46d39bf8c13",
+          "question_types": ["choice", "score", "noul"],
+          "max_state_len": 256,
+          "max_option_len": 64,
+          "option_batch_size": 16
+        }
+      }
     },
     "mxbai-rerank-base-v2": {
       "backend": "transformers",

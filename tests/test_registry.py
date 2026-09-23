@@ -280,6 +280,18 @@ def test_transformers_dispatch_supports_scalar_sequence_classifier(
     assert runtime is sentinel
 
 
+def test_transformers_dispatch_supports_certo_custom_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = object()
+    monkeypatch.setattr(registry_module, "CertoDecisionBackend", lambda model_id, config: sentinel)
+    runtime = build_transformers_runtime(
+        "altslate/certo-decision-model",
+        {"decision": {"readout": "certo_decision"}},
+    )
+    assert runtime is sentinel
+
+
 @pytest.mark.parametrize(
     ("readout", "backend_name"),
     [

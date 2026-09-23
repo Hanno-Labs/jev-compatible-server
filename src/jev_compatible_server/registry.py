@@ -19,6 +19,7 @@ from .backends import (
 )
 from .bosun import BosunDecisionBackend
 from .causal_options import CausalOptionsBackend
+from .certo import CertoDecisionBackend
 from .classifier_adapters import GLiClassCalibratedBackend, NLIEntailmentBackend
 from .cross_encoder import CrossEncoderBackend
 from .custom_heads import OpenJevScalarHeadBackend, SmallJevSemanticBackend
@@ -162,6 +163,8 @@ def build_transformers_runtime(
         return EncoderDecoderMarginBackend(model_id, config=effective_config)
     if readout == "sequence_classifier_margin":
         return SequenceClassifierMarginBackend(model_id, config=effective_config)
+    if readout == "certo_decision":
+        return CertoDecisionBackend(model_id, config=effective_config)
     if readout == "cross_encoder_margin":
         return CrossEncoderBackend(model_id, config=effective_config)
     if readout == "causal_options":
