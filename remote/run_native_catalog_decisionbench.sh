@@ -150,9 +150,12 @@ start_native_server() {
       # The renderer selects OpenJev's pinned public image.  Installing the
       # pinned source keeps the API code and the custom structured-read vLLM
       # revision together instead of substituting stock vLLM.
-      clone_pinned https://github.com/razorback16/openjev.git e04794ab36e4f7e6040c2547baecdb2737ce2e79 "$native_root/openjev"
+      clone_pinned https://github.com/razorback16/openjev.git 297a4efa843cca82b1e9989a3f50b5f1bdc49752 "$native_root/openjev"
       uv pip install --python "$(command -v python)" "$native_root/openjev"
-      start_process native bash -c "OPENJEV_HOST=127.0.0.1 OPENJEV_PORT=8080 OPENJEV_MODEL=nvidia/diffusiongemma-26B-A4B-it-NVFP4 OPENJEV_UPSTREAM= '$native_root/openjev/docker/entrypoint.sh'"
+      start_process native env -u OPENJEV_UPSTREAM \
+        OPENJEV_HOST=127.0.0.1 OPENJEV_PORT=8080 \
+        OPENJEV_MODEL=nvidia/diffusiongemma-26B-A4B-it-NVFP4 \
+        bash "$native_root/openjev/docker/entrypoint.sh"
       native_pid=$started_pid
       wait_for_http native "$native_pid" http://127.0.0.1:8080/v1/models
       ;;
@@ -204,6 +207,20 @@ run_probe() {
     return 1
   fi
   jq -e '.answers.on.type == "noul" and (.answers.on.noul | type == "number")' /workflow/probe-response.json >/dev/null
+  if [[ "$MODEL_KEY" == openjev-thinking || "$MODEL_KEY" == openjev-razorback16 ]]; then
+    local wide_status
+    wide_status="$(jq -nc --arg model "$MODEL_KEY" '{model:$model,state:"Choose the final option.",questions:{many:{type:"choice",instructions:"Choose one.",criteria:(reduce range(0;255) as $i ({}; .["c"+($i|tostring)]="Option "+($i|tostring)))}}}' |
+      curl -sS -o /workflow/probe-wide-response.json -w '%{http_code}' "http://127.0.0.1:${compat_port}/v1/systemone" -H 'Content-Type: application/json' -d @-)" || {
+        echo "NATIVE_CATALOG_PROBE_WIDE_TRANSPORT_FAILED model=$MODEL_KEY" >&2
+        return 1
+      }
+    if [[ "$wide_status" != 200 ]] || ! jq -e '.answers.many.type == "choice" and (.answers.many.probabilities | length) == 255' /workflow/probe-wide-response.json >/dev/null; then
+      local detail
+      detail="$(jq -r '(.detail // .error // "invalid-probabilities") | tostring | .[0:400]' /workflow/probe-wide-response.json 2>/dev/null || echo invalid-response)"
+      echo "NATIVE_CATALOG_PROBE_WIDE_FAILED model=$MODEL_KEY status=$wide_status detail=$detail" >&2
+      return 1
+    fi
+  fi
   echo "NATIVE_CATALOG_PROBE_COMPLETE model=$MODEL_KEY" >&2
 }
 

@@ -47,10 +47,10 @@ case "$model_key" in
     image="pytorch/pytorch:2.6.0-cuda12.6-cudnn9-devel"
     ;;
   openjev-thinking)
-    image="razorback16/openjev:0.3.0"
+    image="razorback16/openjev:0.4.0"
     ;;
   openjev-razorback16)
-    image="razorback16/openjev:0.3.0"
+    image="razorback16/openjev:0.4.0"
     ;;
   openjev-sglang)
     image="lmsysorg/sglang:v0.5.19-cu130"
@@ -71,4 +71,3 @@ sed \
   -e "s|__GPU_NAMES__|$gpu_names|g" \
   -e "s/__GPU_MEMORY__/$gpu_memory/g" \
   "$template"
-
