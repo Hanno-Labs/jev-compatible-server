@@ -186,11 +186,23 @@ start_native_server() {
 }
 
 run_probe() {
-  curl -fsS "http://127.0.0.1:${compat_port}/health" >/dev/null
-  curl -fsS "http://127.0.0.1:${compat_port}/v1/systemone" \
+  if ! curl -fsS "http://127.0.0.1:${compat_port}/health" >/dev/null; then
+    echo "NATIVE_CATALOG_PROBE_HEALTH_FAILED model=$MODEL_KEY" >&2
+    return 1
+  fi
+  local probe_status
+  probe_status="$(curl -sS -o /workflow/probe-response.json -w '%{http_code}' "http://127.0.0.1:${compat_port}/v1/systemone" \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"$MODEL_KEY\",\"state\":\"The light is on.\",\"questions\":{\"on\":{\"type\":\"noul\",\"instructions\":\"Is the light on?\"}}}" \
-    >/workflow/probe-response.json
+    -d "{\"model\":\"$MODEL_KEY\",\"state\":\"The light is on.\",\"questions\":{\"on\":{\"type\":\"noul\",\"instructions\":\"Is the light on?\"}}}")" || {
+      echo "NATIVE_CATALOG_PROBE_TRANSPORT_FAILED model=$MODEL_KEY" >&2
+      return 1
+    }
+  if [[ "$probe_status" != 200 ]]; then
+    local detail
+    detail="$(jq -r '(.detail // .error // "unknown") | tostring | .[0:400]' /workflow/probe-response.json 2>/dev/null || echo invalid-response)"
+    echo "NATIVE_CATALOG_PROBE_HTTP_FAILED model=$MODEL_KEY status=$probe_status detail=$detail" >&2
+    return 1
+  fi
   jq -e '.answers.on.type == "noul" and (.answers.on.noul | type == "number")' /workflow/probe-response.json >/dev/null
   echo "NATIVE_CATALOG_PROBE_COMPLETE model=$MODEL_KEY" >&2
 }
