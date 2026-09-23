@@ -270,10 +270,10 @@ run_suite() {
     sleep 5
   done
   wait "$evaluation_pid"
-  summary_is_complete "$result_dir/summary.json"
   stop_process "$chunk_pid"
   chunk_pid=
   bash "$chunk_helper" publish "$remote_result_dir" "$result_dir"
+  summary_is_complete "$result_dir/summary.json"
   active_result_dir=
   active_remote_dir=
   echo "NATIVE_CATALOG_COMPLETE model=$MODEL_KEY rows=23900" >&2
