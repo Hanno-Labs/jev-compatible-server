@@ -142,7 +142,7 @@ start_native_server() {
       clone_pinned https://github.com/logan-markewich/jeff.git 34b32f99a727c47b679adde33f4702a001e02979 "$native_root/jeff"
       uv sync --directory "$native_root/jeff"
       (cd "$native_root/jeff" && uv run hf download knowledgator/gliformer-large-v1 --revision d0a4e53d09cebe6bc963dd9be319d4279084bb2d --local-dir models/gliformer-large-v1)
-      start_process native bash -c "cd '$native_root/jeff'; JEFF_API_KEYS=decisionbench JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 uv run jeff"
+      start_process native bash -c "cd '$native_root/jeff'; JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 uv run jeff"
       native_pid=$started_pid
       wait_for_http native "$native_pid" http://127.0.0.1:8000/healthz
       ;;
@@ -195,9 +195,17 @@ run_probe() {
   echo "NATIVE_CATALOG_PROBE_COMPLETE model=$MODEL_KEY" >&2
 }
 
+summary_is_complete() {
+  if [[ "${RETRY_ERRORS:-0}" == "1" ]]; then
+    jq -e '.requested_rows == 23900 and .successful_rows == 23900 and .error_rows == 0' "$1" >/dev/null
+  else
+    jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$1" >/dev/null
+  fi
+}
+
 run_suite() {
   bash "$chunk_helper" restore "$remote_result_dir" "$result_dir"
-  if [[ -f "$result_dir/summary.json" ]] && jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$result_dir/summary.json" >/dev/null; then
+  if [[ -f "$result_dir/summary.json" ]] && summary_is_complete "$result_dir/summary.json"; then
     echo "NATIVE_CATALOG_SKIP model=$MODEL_KEY reason=complete" >&2
     return
   fi
@@ -224,7 +232,7 @@ run_suite() {
     sleep 5
   done
   wait "$evaluation_pid"
-  jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$result_dir/summary.json" >/dev/null
+  summary_is_complete "$result_dir/summary.json"
   stop_process "$chunk_pid"
   chunk_pid=
   bash "$chunk_helper" publish "$remote_result_dir" "$result_dir"

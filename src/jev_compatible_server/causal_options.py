@@ -372,11 +372,67 @@ class CausalOptionsBackend(DecisionRuntime):
         return result
 
     def _score(self, compiled: OptionPrompt) -> dict[str, float]:
+        if self._profile() == "system_one_sg" and len(compiled.labels) > 10:
+            return self._score_system_one_sg_sequences(compiled)
         ids = self._token_ids(compiled); encoded = self._tokenizer(compiled.prompt, return_tensors="pt", add_special_tokens=compiled.add_special_tokens); device = next(self._model.parameters()).device; encoded = {k: v.to(device) for k, v in encoded.items()}
         context = self._torch.inference_mode() if hasattr(self._torch, "inference_mode") else nullcontext()
         with context: output = self._model(**encoded)
         pos = int(encoded["attention_mask"][0].sum().item()) - 1 if "attention_mask" in encoded else -1; row = output.logits[0, pos]
         return {label: float(row[token].item()) for label, token in ids.items()}
+
+    def _score_system_one_sg_sequences(self, compiled: OptionPrompt) -> dict[str, float]:
+        """Extend SG's single-token index readout to decimal token sequences.
+
+        SG's native 0-9 path is unchanged. For larger choice sets, score each
+        decimal index by its full conditional token log-probability and then
+        apply the same option-level temperature softmax as the native path.
+        """
+        base = self._tokenizer.encode(
+            compiled.prompt, add_special_tokens=compiled.add_special_tokens
+        )
+        if not base:
+            raise RuntimeErrorBase("system_one_sg prompt has no tokens")
+        paths: dict[str, tuple[int, ...]] = {}
+        for label, suffix in compiled.suffixes.items():
+            after = self._tokenizer.encode(
+                compiled.prompt + suffix,
+                add_special_tokens=compiled.add_special_tokens,
+            )
+            if after[:len(base)] != base or len(after) == len(base):
+                raise RuntimeErrorBase(
+                    f"decision label {label!r} is not a token continuation at its prompt boundary"
+                )
+            paths[label] = tuple(int(token) for token in after[len(base):])
+        if len(set(paths.values())) != len(paths):
+            raise RuntimeErrorBase("decision labels collide at prompt boundary")
+
+        children: dict[tuple[int, ...], set[int]] = {}
+        for path in paths.values():
+            for depth, token in enumerate(path):
+                children.setdefault(path[:depth], set()).add(token)
+        device = next(self._model.parameters()).device
+        scores: dict[tuple[int, ...], float] = {(): 0.0}
+        context = self._torch.inference_mode() if hasattr(self._torch, "inference_mode") else nullcontext()
+        with context:
+            for depth in range(max(map(len, paths.values()))):
+                parents = [path for path in children if len(path) == depth]
+                for start in range(0, len(parents), 8):
+                    batch = parents[start:start + 8]
+                    input_ids = self._torch.tensor(
+                        [base + list(path) for path in batch], device=device
+                    )
+                    attention_mask = self._torch.ones_like(input_ids)
+                    logits = self._model(
+                        input_ids=input_ids, attention_mask=attention_mask,
+                        logits_to_keep=1, use_cache=False,
+                    ).logits[:, -1, :]
+                    log_probs = self._torch.log_softmax(logits.float(), dim=-1)
+                    for row, parent in enumerate(batch):
+                        for token in children[parent]:
+                            scores[parent + (token,)] = scores[parent] + float(
+                                log_probs[row, token].item()
+                            )
+        return {label: scores[path] for label, path in paths.items()}
 
     def _answer(self, question: Any, probs: dict[str, float]) -> Any:
         confidence = max(probs.values())

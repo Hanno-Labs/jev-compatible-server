@@ -80,7 +80,15 @@ wait_for_server() {
   done
 }
 
-if [[ "$run_mode" == suite && -f "$result_dir/summary.json" ]] && jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$result_dir/summary.json" >/dev/null; then
+summary_is_complete() {
+  if [[ "${RETRY_ERRORS:-0}" == "1" ]]; then
+    jq -e '.requested_rows == 23900 and .successful_rows == 23900 and .error_rows == 0' "$1" >/dev/null
+  else
+    jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$1" >/dev/null
+  fi
+}
+
+if [[ "$run_mode" == suite && -f "$result_dir/summary.json" ]] && summary_is_complete "$result_dir/summary.json"; then
   echo "DECISION_BENCH_SKIP model=$MODEL_KEY reason=complete" >&2
   exit 0
 fi
@@ -104,6 +112,11 @@ if [[ "$run_mode" == probe ]]; then
     -d "{\"model\":\"$MODEL_KEY\",\"state\":\"The light is on.\",\"questions\":{\"decision\":{\"type\":\"noul\",\"instructions\":\"Is the light on?\"}}}" \
     >/workflow/probe-response.json
   jq -e '.answers.decision.type == "noul" and (.answers.decision.noul | type == "number")' /workflow/probe-response.json >/dev/null
+  if [[ "$MODEL_KEY" == system-one-sg ]]; then
+    jq -nc '{model:"system-one-sg",state:"The light is on.",questions:{many:{type:"choice",instructions:"Choose the matching option.",criteria:(reduce range(11) as $i ({}; . + {("c"+($i|tostring)):("candidate "+($i|tostring))}))}}}' |
+      curl -fsS http://127.0.0.1:8000/v1/systemone -H 'Content-Type: application/json' -d @- >/workflow/probe-eleven-response.json
+    jq -e '.answers.many.type == "choice" and (.answers.many.probabilities | length == 11)' /workflow/probe-eleven-response.json >/dev/null
+  fi
   echo "DECISION_BENCH_PROBE_COMPLETE model=$MODEL_KEY" >&2
   exit 0
 fi
@@ -122,7 +135,7 @@ fi
   --project-root "$source_root" --base-url http://127.0.0.1:8000 \
   --model "$MODEL_KEY" --concurrency "${EVAL_CONCURRENCY:-8}")
 
-jq -e '.requested_rows == 23900 and (.successful_rows + .error_rows == 23900)' "$result_dir/summary.json" >/dev/null
+summary_is_complete "$result_dir/summary.json"
 kill "$chunk_pid" 2>/dev/null || true
 wait "$chunk_pid" 2>/dev/null || true
 chunk_pid=
