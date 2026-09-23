@@ -142,7 +142,10 @@ start_native_server() {
       clone_pinned https://github.com/logan-markewich/jeff.git 34b32f99a727c47b679adde33f4702a001e02979 "$native_root/jeff"
       uv sync --directory "$native_root/jeff"
       (cd "$native_root/jeff" && uv run hf download knowledgator/gliformer-large-v1 --revision d0a4e53d09cebe6bc963dd9be319d4279084bb2d --local-dir models/gliformer-large-v1)
-      start_process native bash -c "cd '$native_root/jeff'; JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 JEFF_MAX_LABELS=255 uv run jeff"
+      uv pip install --python "$native_root/jeff/.venv/bin/python" \
+        --torch-backend=cu128 --force-reinstall "torch==2.11.0"
+      "$native_root/jeff/.venv/bin/python" -c 'import torch; assert torch.cuda.is_available(), "JEFF_CUDA_UNAVAILABLE"; print(f"JEFF_GPU_PROBE_COMPLETE torch={torch.__version__} cuda={torch.version.cuda} device={torch.cuda.get_device_name(0)}")'
+      start_process native bash -c "cd '$native_root/jeff'; JEFF_MODEL='$native_root/jeff/models/gliformer-large-v1' JEFF_HOST=127.0.0.1 JEFF_PORT=8000 JEFF_MAX_LABELS=255 uv run --no-sync jeff"
       native_pid=$started_pid
       wait_for_http native "$native_pid" http://127.0.0.1:8000/healthz
       ;;
